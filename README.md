@@ -119,7 +119,7 @@ All performance visualizations are saved in `models/`:
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/SmartSoma.git
+git clone https://github.com/Reennee/SmartSoma.git
 cd SmartSoma
 ```
 
@@ -205,6 +205,24 @@ curl -X POST http://localhost:8000/api/recommend \\
   }
 ]
 ```
+## 🎨 System Architecture
+
+```mermaid
+graph TB
+    A[Student Browser<br/>React PWA] -->|API Calls| B[FastAPI Backend<br/>Edge Server]
+    B --> C[BiLSTM Model<br/>PyTorch]
+    B --> D[SQLite Database<br/>Local Storage]
+    C --> E[Recommendation Engine<br/>Hybrid Filtering]
+    E --> A
+    B -.Optional Sync.-> F[Cloud Server<br/>PostgreSQL]
+    
+    style A fill:#61DAFB
+    style B fill:#009688
+    style C fill:#EE4C2C
+    style D fill:#003B57
+    style E fill:#9C27B0
+    style F fill:#FF9800
+```
 
 ### Key Components
 
@@ -244,6 +262,42 @@ curl -X POST http://localhost:8000/api/recommend \\
                         │ duration...  │         │ grade_level    │
                         └──────────────┘         └────────────────┘
 ```
+
+---
+
+## 🚢 Deployment Plan
+
+### Local Deployment (School Server)
+
+**Hardware Requirements:**
+- Raspberry Pi 4 (4GB RAM) or equivalent
+- 32GB microSD card
+- Local WiFi router
+
+**Steps:**
+1. Flash Raspberry Pi OS
+2. Clone repository
+3. Install Python dependencies
+4. Run FastAPI server on boot
+5. Configure local network access
+
+**Docker Deployment:**
+```bash
+# Build image
+docker build -t smartsoma:latest .
+
+# Run container
+docker run -d -p 8000:8000 \\
+  -v ./data:/app/data \\
+  -v ./models:/app/models \\
+  smartsoma:latest
+```
+
+### Cloud Deployment (Optional Central Sync)
+
+- **Platform**: Railway / Render / Vercel
+- **Purpose**: Aggregate anonymized data for national insights
+- **Sync Frequency**: Weekly (when internet available)
 
 ---
 
