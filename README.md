@@ -12,6 +12,9 @@
 
 SmartSoma is an AI-driven educational recommender system that delivers personalized, curriculum-aligned study materials to secondary students in Rwanda. The system uses **Deep Knowledge Tracing (DKT)** with BiLSTM neural networks to predict student mastery levels and recommend optimal learning resources, even in offline environments.
 
+## DEMO
+[DEMO VIDEO](https://www.loom.com/share/93beddd558a542af823868b3e9d063d2)
+
 ### Problem Statement
 
 Rwandan secondary students face:
