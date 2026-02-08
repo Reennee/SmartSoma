@@ -1,0 +1,37 @@
+
+SmartSoma BiLSTM Deep Knowledge Tracing Model
+Performance Metrics Summary
+============================================================
+
+Dataset:
+  - Total Interactions: 1200
+  - Training Samples: 920
+  - Test Samples: 230
+  - Students: 50
+  - Materials: 100
+
+Model Architecture:
+  - Type: Bidirectional LSTM (BiLSTM)
+  - Hidden Size: 128
+  - Layers: 2
+  - Total Parameters: 548,993
+
+Training Configuration:
+  - Epochs: 30
+  - Batch Size: 32
+  - Optimizer: Adam (lr=0.001)
+  - Loss Function: MSE
+
+Performance Metrics:
+  - RMSE: 0.0881
+  - MAE: 0.0667
+  - R² Score: 0.1436
+  - Accuracy (Binary): 97.39%
+  - AUC-ROC: 0.7820
+
+Recommendation Quality:
+  - Precision@5: 0.0000
+  - Precision@10: 0.1000
+
+============================================================
+Model ready for deployment on Edge devices!

@@ -159,18 +159,6 @@ jupyter notebook notebooks/model_development.ipynb
 # - Export trained model
 ```
 
-### 4. Frontend Setup (Optional)
-
-```bash
-cd frontend
-npm install
-npm run dev
-
-# Frontend will be available at: http://localhost:5173
-```
-
----
-
 ## 🚀 API Documentation
 
 ### Base URL
@@ -218,29 +206,6 @@ curl -X POST http://localhost:8000/api/recommend \\
 ]
 ```
 
-**Interactive Documentation:** Visit `http://localhost:8000/docs` for Swagger UI
-
----
-
-## 🎨 System Architecture
-
-```mermaid
-graph TB
-    A[Student Browser<br/>React PWA] -->|API Calls| B[FastAPI Backend<br/>Edge Server]
-    B --> C[BiLSTM Model<br/>PyTorch]
-    B --> D[SQLite Database<br/>Local Storage]
-    C --> E[Recommendation Engine<br/>Hybrid Filtering]
-    E --> A
-    B -.Optional Sync.-> F[Cloud Server<br/>PostgreSQL]
-    
-    style A fill:#61DAFB
-    style B fill:#009688
-    style C fill:#EE4C2C
-    style D fill:#003B57
-    style E fill:#9C27B0
-    style F fill:#FF9800
-```
-
 ### Key Components
 
 1. **Frontend (React PWA)**:  
@@ -282,109 +247,6 @@ graph TB
 
 ---
 
-## 🚢 Deployment Plan
-
-### Local Deployment (School Server)
-
-**Hardware Requirements:**
-- Raspberry Pi 4 (4GB RAM) or equivalent
-- 32GB microSD card
-- Local WiFi router
-
-**Steps:**
-1. Flash Raspberry Pi OS
-2. Clone repository
-3. Install Python dependencies
-4. Run FastAPI server on boot
-5. Configure local network access
-
-**Docker Deployment:**
-```bash
-# Build image
-docker build -t smartsoma:latest .
-
-# Run container
-docker run -d -p 8000:8000 \\
-  -v ./data:/app/data \\
-  -v ./models:/app/models \\
-  smartsoma:latest
-```
-
-### Cloud Deployment (Optional Central Sync)
-
-- **Platform**: Railway / Render / Vercel
-- **Purpose**: Aggregate anonymized data for national insights
-- **Sync Frequency**: Weekly (when internet available)
-
----
-
-## 🎯 Rwandan Competence-Based Curriculum Alignment
-
-### Supported Subjects
-- **Mathematics (S1-S3)**:
-  - Numbers and Operations
-  - Algebra and Equations
-  - Geometry and Measurement
-  - Statistics and Probability
-  - Ratios and Proportions
-  - Functions and Graphs
-
-- **Physics (S1-S3)**:
-  - Mechanics and Motion
-  - Forces and Energy
-  - Electricity and Magnetism
-  - Light and Sound
-  - Matter and Heat
-  - Scientific Investigation
-
----
-
-## 📹 Video Demo
-
-**Duration**: 7 minutes
-
-**Contents**:
-1. System Overview (1 min)
-2. Data Visualization in Jupyter Notebook (1.5 min)
-3. BiLSTM Model Training & Metrics (2 min)
-4. API Demo (Swagger UI) (1.5 min)
-5. Backend Recommendation Logic (1 min)
-
-**Demo Link**: [Watch on YouTube](#) *(Upload your screen recording here)*
-
----
-
-## 📄 Submission Checklist
-
-- [x] Jupyter Notebook (`model_development.ipynb`)
-  - [x] Data visualization
-  - [x] BiLSTM model architecture
-  - [x] Performance metrics (RMSE, AUC-ROC, Precision@K)
-  - [x] Model export
-
-- [x] Backend API (FastAPI)
-  - [x] Recommendation endpoint
-  - [x] Progress tracking
-  - [x] Swagger UI documentation
-
-- [x] Documentation
-  - [x] Comprehensive README
-  - [x] Setup instructions
-  - [x] API documentation
-  - [x] Deployment plan
-
-- [x] Code Files
-  - [x] `requirements.txt`
-  - [x] Synthetic data generator
-  - [x] Backend server
-  - [x] Model training notebook
-
-- [ ] Video Demo (5-10 minutes)
-- [ ] Designs/Screenshots
-- [ ] GitHub Repository Link
-
----
-
 ## 👨‍💻 Author
 
 **René Ntabana**  
@@ -405,17 +267,10 @@ African Leadership University
 
 ---
 
-## 📜 License
-
-This project is licensed under the MIT License - see LICENSE file for details.
-
----
-
 ## 🙏 Acknowledgments
 
 - Rwanda Education Board (REB) for curriculum resources
 - UNU-WIDER for research insights on smart classrooms in Rwanda
-- My supervisor Simeon Nsabiyumva for guidance
 - The open-source ML community (PyTorch, FastAPI, scikit-learn)
 
 ---
