@@ -1,4 +1,8 @@
 # .gitignore for SmartSoma
+# ─── Secrets — NEVER commit these ────────────────────────────────────────────
+backend/.env
+frontend/.env.local
+.env
 
 # Python
 __pycache__/

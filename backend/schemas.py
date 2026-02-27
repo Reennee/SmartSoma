@@ -170,6 +170,8 @@ class ClassAnalyticsOut(BaseModel):
 # ─── System ──────────────────────────────────────────────────────────────────
 
 class HealthCheck(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     message: str
     version: str
     status: str

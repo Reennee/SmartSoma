@@ -31,7 +31,10 @@ except ImportError:
 class BiLSTM_DKT(nn.Module if TORCH_AVAILABLE else object):
     """
     Bidirectional LSTM for Deep Knowledge Tracing.
-    Architecture is kept identical to the trained model.
+    Architecture exactly matches the trained checkpoint keys:
+      bilstm: LSTM(input=4, hidden=128, layers=2, bidirectional=True)
+      fc1: Linear(256, 64)   — 256 = 128 * 2 (bidirectional concat)
+      fc2: Linear(64, 1)     — followed by sigmoid in forward()
     """
     def __init__(self, input_size=4, hidden_size=128, num_layers=2, dropout=0.3):
         if TORCH_AVAILABLE:
@@ -44,18 +47,14 @@ class BiLSTM_DKT(nn.Module if TORCH_AVAILABLE else object):
                 bidirectional=True,
                 dropout=dropout if num_layers > 1 else 0,
             )
-            self.fc = nn.Sequential(
-                nn.Linear(hidden_size * 2, 64),
-                nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(64, 1),
-                nn.Sigmoid(),
-            )
+            self.fc1 = nn.Linear(hidden_size * 2, 64)
+            self.fc2 = nn.Linear(64, 1)
 
     def forward(self, x):
         out, _ = self.bilstm(x)
-        last = out[:, -1, :]
-        return self.fc(last)
+        last = out[:, -1, :]                     # take final timestep
+        hidden = torch.relu(self.fc1(last))
+        return torch.sigmoid(self.fc2(hidden))
 
 
 # ─── DKT Service ─────────────────────────────────────────────────────────────
