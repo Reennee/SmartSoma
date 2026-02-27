@@ -30,6 +30,14 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("✅ Database tables ready")
 
+    # Seed the database (idempotent — skips existing records)
+    try:
+        from backend.seed import run as seed_run
+        seed_run()
+        logger.info("✅ Database seeded")
+    except Exception as exc:
+        logger.warning(f"⚠️  Seed skipped or failed: {exc}")
+
     # Load the BiLSTM DKT model into memory
     DKTService.load()
     model_status = "loaded" if DKTService._model is not None else "heuristic fallback"
