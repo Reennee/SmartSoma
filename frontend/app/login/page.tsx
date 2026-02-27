@@ -1,15 +1,61 @@
+// === FILE: app/login/page.tsx ===
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brain, Eye, EyeOff, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion } from "framer-motion";
+import {
+  Brain,
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  ArrowRight,
+  Sparkles,
+  Zap,
+  BarChart3,
+} from "lucide-react";
 import { authApi } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
+
+// ── Shared transition helper ─────────────────────────────────────────────────
+
+function fadeUpProps(delay: number = 0) {
+  return {
+    initial: { opacity: 0, y: 28 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.55, ease: "easeOut" as const, delay },
+  };
+}
+
+// ── Static data ──────────────────────────────────────────────────────────────
+
+const featureCards = [
+  {
+    icon: Sparkles,
+    title: "AI-Powered Learning",
+    desc: "Personalized paths built by machine learning",
+    color: "text-blue-400",
+    border: "border-blue-500/25",
+  },
+  {
+    icon: Zap,
+    title: "USSD Offline Access",
+    desc: "Learn anywhere — no internet required",
+    color: "text-purple-400",
+    border: "border-purple-500/25",
+  },
+  {
+    icon: BarChart3,
+    title: "Real-Time Progress",
+    desc: "Track mastery across every competency",
+    color: "text-cyan-400",
+    border: "border-cyan-500/25",
+  },
+];
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,7 +76,9 @@ export default function LoginPage() {
         full_name: data.full_name,
         role: data.role,
       });
-      router.push(data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
+      router.push(
+        data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard"
+      );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -39,96 +87,223 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-950 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="app-bg min-h-screen flex">
+      {/* ── Blobs ── */}
+      <div className="blob blob-blue w-[520px] h-[520px] top-[-80px] left-[-120px] opacity-60 pulse-glow" />
+      <div className="blob blob-purple w-[420px] h-[420px] top-[40%] left-[20%] opacity-40 pulse-glow" />
+      <div className="blob blob-cyan w-[300px] h-[300px] bottom-[-60px] left-[30%] opacity-30" />
+
+      {/* Dot grid overlay */}
+      <div className="dot-grid fixed inset-0 pointer-events-none" />
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          LEFT PANEL — brand showcase (hidden on mobile)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="hidden lg:flex flex-col justify-center px-16 w-[52%] min-h-screen page-wrap">
         {/* Logo */}
-        <div className="flex flex-col items-center gap-2 text-white">
-          <div className="bg-blue-500/20 border border-blue-400/30 rounded-2xl p-3">
-            <Brain className="h-8 w-8 text-blue-300" />
+        <motion.div
+          {...fadeUpProps(0)}
+          className="flex items-center gap-4 mb-10"
+        >
+          <div className="gcard p-4 glow-blue">
+            <Brain className="h-10 w-10 text-blue-400" />
           </div>
-          <span className="text-2xl font-bold">SmartSoma</span>
-          <p className="text-blue-200/70 text-sm">Sign in to your account</p>
+          <span className="text-4xl font-extrabold tracking-tight grad-text">
+            SmartSoma
+          </span>
+        </motion.div>
+
+        {/* Tagline */}
+        <motion.h1
+          {...fadeUpProps(0.1)}
+          className="text-5xl font-extrabold text-white leading-tight mb-4"
+        >
+          The smartest way
+          <br />
+          <span className="grad-text">to learn in Rwanda.</span>
+        </motion.h1>
+
+        <motion.p
+          {...fadeUpProps(0.2)}
+          className="text-white/50 text-lg mb-14 max-w-md"
+        >
+          AI-driven, curriculum-aligned, and accessible even without internet —
+          powered by USSD.
+        </motion.p>
+
+        {/* Feature cards */}
+        <div className="flex flex-col gap-4 max-w-sm">
+          {featureCards.map((card, i) => (
+            <motion.div
+              key={card.title}
+              {...fadeUpProps(0.3 + i * 0.12)}
+              className={`glass glass-hover flex items-start gap-4 px-5 py-4 border ${card.border}`}
+            >
+              <div className="mt-0.5">
+                <card.icon className={`h-5 w-5 ${card.color}`} />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-sm">{card.title}</p>
+                <p className="text-white/45 text-xs mt-0.5">{card.desc}</p>
+              </div>
+            </motion.div>
+          ))}
         </div>
+      </div>
 
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm text-white shadow-2xl">
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl text-white">Welcome back</CardTitle>
-            <CardDescription className="text-blue-200/70">
-              Enter your email and password to continue
-            </CardDescription>
-          </CardHeader>
+      {/* ══════════════════════════════════════════════════════════════════════
+          RIGHT PANEL — auth form
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="flex-1 flex items-center justify-center px-6 py-16 page-wrap overflow-y-auto">
+        <div className="w-full max-w-md">
+          {/* Mobile logo */}
+          <motion.div
+            {...fadeUpProps(0)}
+            className="flex lg:hidden items-center justify-center gap-3 mb-8"
+          >
+            <Brain className="h-7 w-7 text-blue-400" />
+            <span className="text-2xl font-extrabold grad-text">SmartSoma</span>
+          </motion.div>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Form card */}
+          <motion.div {...fadeUpProps(0.05)} className="gcard px-8 py-10">
+            {/* Heading */}
+            <motion.div {...fadeUpProps(0.12)} className="mb-8">
+              <h2 className="text-3xl font-extrabold text-white mb-1">
+                Welcome back
+              </h2>
+              <p className="text-white/45 text-sm">
+                Sign in to continue your learning journey
+              </p>
+            </motion.div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              {/* Error */}
               {error && (
-                <div className="bg-red-500/15 border border-red-400/30 rounded-lg px-4 py-3 text-red-300 text-sm">
-                  {error}
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className="glass px-4 py-3 border border-red-500/30 rounded-xl"
+                >
+                  <p className="text-red-400 text-sm">{error}</p>
+                </motion.div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-blue-100">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@smartsoma.rw"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-blue-400 focus:ring-blue-400/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-blue-100">Password</Label>
+              {/* Email */}
+              <motion.div
+                {...fadeUpProps(0.18)}
+                className="flex flex-col gap-1.5"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  Email address
+                </label>
                 <div className="relative">
-                  <Input
-                    id="password"
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+                  <input
+                    type="email"
+                    placeholder="you@smartsoma.rw"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="input-premium pl-11"
+                  />
+                </div>
+              </motion.div>
+
+              {/* Password */}
+              <motion.div
+                {...fadeUpProps(0.24)}
+                className="flex flex-col gap-1.5"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+                  <input
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-blue-400 pr-10"
+                    className="input-premium pl-11 pr-12"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
-              </div>
+              </motion.div>
 
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-500 hover:bg-blue-400 text-white font-semibold h-11 mt-2"
-              >
-                {loading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Signing in…</>
-                ) : (
-                  "Sign in"
-                )}
-              </Button>
+              {/* Submit */}
+              <motion.div {...fadeUpProps(0.3)}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-grad w-full flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {loading ? (
+                    <>
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Signing in…
+                    </>
+                  ) : (
+                    <>
+                      Sign in
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </motion.div>
             </form>
 
             {/* Demo credentials */}
-            <div className="mt-5 p-3 rounded-lg bg-blue-900/40 border border-blue-700/30 space-y-1">
-              <p className="text-xs font-semibold text-blue-300 uppercase tracking-wide">Demo accounts</p>
-              <p className="text-xs text-blue-200/70">Student: <span className="text-blue-100 font-mono">student1@smartsoma.rw / SmartSoma2025!</span></p>
-              <p className="text-xs text-blue-200/70">Teacher: <span className="text-blue-100 font-mono">teacher@smartsoma.rw / TeacherPass2025!</span></p>
-            </div>
+            <motion.div
+              {...fadeUpProps(0.38)}
+              className="glass mt-6 px-4 py-4 border border-white/[0.07] rounded-xl"
+            >
+              <p className="text-white/40 text-[11px] font-semibold uppercase tracking-widest mb-2">
+                Demo credentials
+              </p>
+              <div className="flex flex-col gap-1">
+                <p className="text-white/40 text-xs">
+                  Student:{" "}
+                  <span className="text-white/70 font-mono">
+                    student1@smartsoma.rw&nbsp;/&nbsp;SmartSoma2025!
+                  </span>
+                </p>
+                <p className="text-white/40 text-xs">
+                  Teacher:{" "}
+                  <span className="text-white/70 font-mono">
+                    teacher@smartsoma.rw&nbsp;/&nbsp;TeacherPass2025!
+                  </span>
+                </p>
+              </div>
+            </motion.div>
 
-            <p className="text-center text-sm text-blue-200/60 mt-5">
+            {/* Register link */}
+            <motion.p
+              {...fadeUpProps(0.44)}
+              className="text-center text-sm text-white/40 mt-6"
+            >
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="text-blue-300 hover:text-blue-200 font-medium">
-                Sign up
+              <Link
+                href="/register"
+                className="text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+              >
+                Create one free
               </Link>
-            </p>
-          </CardContent>
-        </Card>
+            </motion.p>
+          </motion.div>
+        </div>
       </div>
     </div>
   );

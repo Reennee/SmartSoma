@@ -1,22 +1,151 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, TrendingUp, BookOpen, Zap, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { TrendingUp, BookOpen, Brain, Clock, Sparkles } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import RecommendationCard from "@/components/RecommendationCard";
 import MasteryRadar from "@/components/MasteryRadar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { recommendApi, studentApi, type RecommendedMaterial, type StudentProgressOut } from "@/lib/api";
+import {
+  recommendApi,
+  studentApi,
+  type RecommendedMaterial,
+  type StudentProgressOut,
+} from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
+
+// ─── Animated counter hook ────────────────────────────────────────────────────
+
+function useCounter(target: number, duration = 1200) {
+  const [value, setValue] = useState(0);
+  const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target === 0) { setValue(0); return; }
+    const start = performance.now();
+    const from = 0;
+
+    function tick(now: number) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(from + (target - from) * eased));
+      if (progress < 1) frameRef.current = requestAnimationFrame(tick);
+    }
+
+    frameRef.current = requestAnimationFrame(tick);
+    return () => { if (frameRef.current) cancelAnimationFrame(frameRef.current); };
+  }, [target, duration]);
+
+  return value;
+}
+
+// ─── Greeting helper ─────────────────────────────────────────────────────────
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+// ─── Stat card with animated counter ────────────────────────────────────────
+
+interface StatCardProps {
+  label: string;
+  rawValue: number;
+  suffix?: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  index: number;
+}
+
+function StatCard({ label, rawValue, suffix = "", icon, iconBg, index }: StatCardProps) {
+  const counted = useCounter(rawValue);
+
+  return (
+    <motion.div
+      className="gcard p-5 flex items-center gap-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.07 }}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+    >
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconBg}`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-2xl font-bold text-white tabular-nums">
+          {counted}{suffix}
+        </p>
+        <p className="text-xs text-white/45 mt-0.5 truncate">{label}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Skeleton loader ──────────────────────────────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="app-bg">
+      <div className="blob blob-blue w-[500px] h-[500px] top-[-100px] left-[-100px] opacity-40" />
+      <div className="blob blob-purple w-[400px] h-[400px] top-[200px] right-[-80px] opacity-30" />
+      <div className="dot-grid absolute inset-0 pointer-events-none" />
+      <div className="page-wrap">
+        <Navbar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-8">
+          <div className="skeleton h-10 w-72 rounded-xl" />
+          <div className="skeleton h-5 w-48 rounded-lg" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="skeleton h-24 rounded-2xl" />
+            ))}
+          </div>
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-52 rounded-2xl" />
+              ))}
+            </div>
+            <div className="space-y-4">
+              <div className="skeleton h-72 rounded-2xl" />
+              <div className="skeleton h-40 rounded-2xl" />
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ─── Score badge ──────────────────────────────────────────────────────────────
+
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score === null) {
+    return <span className="text-xs text-white/30 font-medium">—</span>;
+  }
+  const color =
+    score >= 75
+      ? "bg-green-500/15 text-green-300 border-green-500/25"
+      : score >= 50
+      ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25"
+      : "bg-red-500/15 text-red-300 border-red-500/25";
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${color}`}>
+      {score}%
+    </span>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function StudentDashboard() {
   const router = useRouter();
   const [recommendations, setRecommendations] = useState<RecommendedMaterial[]>([]);
   const [progress, setProgress] = useState<StudentProgressOut | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   const user = getUser();
 
@@ -25,11 +154,10 @@ export default function StudentDashboard() {
     if (user?.role === "teacher") { router.push("/teacher/dashboard"); return; }
   }, [router, user]);
 
-  const load = useCallback(async (showRefresh = false) => {
-    if (showRefresh) setRefreshing(true);
+  const load = useCallback(async () => {
     try {
       const [recs, prog] = await Promise.all([
-        recommendApi.get(5),
+        recommendApi.get(6),
         studentApi.myProgress(),
       ]);
       setRecommendations(recs);
@@ -38,136 +166,198 @@ export default function StudentDashboard() {
       console.error(e);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const overallPct = progress ? Math.round(progress.overall_mastery * 100) : 0;
+  const firstName = user?.full_name?.split(" ")[0] ?? "Student";
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-blue-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-white/60">
-          <Brain className="h-8 w-8 animate-pulse text-blue-400" />
-          <p className="text-sm">Loading your dashboard…</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <DashboardSkeleton />;
 
   return (
-    <div className="min-h-screen bg-blue-950 text-white">
-      <Navbar />
+    <div className="app-bg">
+      {/* Background blobs */}
+      <div className="blob blob-blue  w-[560px] h-[560px] top-[-120px] left-[-140px] opacity-35" />
+      <div className="blob blob-purple w-[440px] h-[440px] top-[280px] right-[-100px] opacity-28" />
+      <div className="blob blob-cyan   w-[320px] h-[320px] bottom-[60px] left-[30%] opacity-22" />
+      <div className="dot-grid absolute inset-0 pointer-events-none" />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">
-              Muraho, {user?.full_name?.split(" ")[0]} 👋
-            </h1>
-            <p className="text-white/50 text-sm mt-1">
-              Here&apos;s what the AI recommends for you today
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => load(true)}
-            disabled={refreshing}
-            className="border-white/20 text-white/70 hover:bg-white/10 hover:text-white bg-transparent"
+      <div className="page-wrap">
+        <Navbar />
+
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-10">
+
+          {/* ── Header ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex items-end justify-between gap-4 flex-wrap"
           >
-            <RefreshCw className={`h-4 w-4 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
+            <div>
+              <p className="text-sm text-white/40 font-medium mb-1 tracking-wide uppercase">
+                {getGreeting()}
+              </p>
+              <h1 className="text-3xl sm:text-4xl font-bold text-white leading-tight">
+                {firstName},&nbsp;
+                <span className="grad-text">ready to learn?</span>
+              </h1>
+              {progress?.grade_level && (
+                <p className="mt-2 text-white/45 text-sm">
+                  Grade {progress.grade_level} &mdash; keep building your mastery
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 glass-sm px-4 py-2 rounded-2xl">
+              <Sparkles className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm text-white/70 font-medium">AI-powered dashboard</span>
+            </div>
+          </motion.div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Overall Mastery", value: `${overallPct}%`, icon: TrendingUp, color: "text-blue-300" },
-            { label: "Total Sessions", value: progress?.total_interactions ?? 0, icon: BookOpen, color: "text-purple-300" },
-            { label: "Competencies", value: progress?.competency_mastery.length ?? 0, icon: Brain, color: "text-green-300" },
-            { label: "Recommendations", value: recommendations.length, icon: Zap, color: "text-yellow-300" },
-          ].map((s) => (
-            <Card key={s.label} className="bg-white/5 border-white/10">
-              <CardContent className="p-4 flex items-center gap-3">
-                <s.icon className={`h-6 w-6 ${s.color} shrink-0`} />
-                <div>
-                  <p className="text-2xl font-bold text-white">{s.value}</p>
-                  <p className="text-xs text-white/50">{s.label}</p>
+          {/* ── Stats row ── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard
+              index={0}
+              label="Overall Mastery"
+              rawValue={overallPct}
+              suffix="%"
+              iconBg="bg-linear-to-br from-blue-500/30 to-blue-600/20"
+              icon={<TrendingUp className="w-5 h-5 text-blue-400" />}
+            />
+            <StatCard
+              index={1}
+              label="Total Sessions"
+              rawValue={progress?.total_interactions ?? 0}
+              iconBg="bg-linear-to-br from-purple-500/30 to-purple-600/20"
+              icon={<BookOpen className="w-5 h-5 text-purple-400" />}
+            />
+            <StatCard
+              index={2}
+              label="Competencies"
+              rawValue={progress?.competency_mastery.length ?? 0}
+              iconBg="bg-linear-to-br from-cyan-500/30 to-cyan-600/20"
+              icon={<Brain className="w-5 h-5 text-cyan-400" />}
+            />
+            <StatCard
+              index={3}
+              label="Materials Available"
+              rawValue={recommendations.length}
+              iconBg="bg-linear-to-br from-green-500/30 to-green-600/20"
+              icon={<Sparkles className="w-5 h-5 text-green-400" />}
+            />
+          </div>
+
+          {/* ── Main content: recommendations + sidebar ── */}
+          <div className="grid lg:grid-cols-3 gap-8">
+
+            {/* ── Recommendations (2/3 width) ── */}
+            <div className="lg:col-span-2 space-y-5">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex items-center gap-3"
+              >
+                <div className="w-8 h-8 rounded-xl bg-linear-to-br from-yellow-500/30 to-orange-500/20 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-yellow-400" />
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                <h2 className="text-lg font-semibold text-white">Recommended for You</h2>
+                <span className="text-xs text-white/35 font-medium ml-1">by AI</span>
+              </motion.div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Recommendations */}
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Zap className="h-5 w-5 text-yellow-400" />
-              AI Recommendations
-            </h2>
-            {recommendations.length === 0 ? (
-              <Card className="bg-white/5 border-white/10">
-                <CardContent className="p-8 text-center text-white/40">
-                  No recommendations yet. The AI needs a few interactions to learn your style.
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {recommendations.map((r) => (
-                  <RecommendationCard
-                    key={r.material_id}
-                    material={r}
-                    onInteracted={() => load(true)}
-                  />
-                ))}
-              </div>
-            )}
+              <AnimatePresence>
+                {recommendations.length === 0 ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="gcard p-10 text-center text-white/40 text-sm"
+                  >
+                    No recommendations yet — study a few materials to train the AI.
+                  </motion.div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {recommendations.slice(0, 6).map((r, i) => (
+                      <motion.div
+                        key={r.material_id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.35 + i * 0.07 }}
+                        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                      >
+                        <RecommendationCard material={r} onStudied={load} />
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* ── Sidebar: radar + recent activity ── */}
+            <div className="space-y-6">
+
+              {/* Mastery radar */}
+              <motion.div
+                className="gcard p-5"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <Brain className="w-4 h-4 text-blue-400" />
+                  <h3 className="text-sm font-semibold text-white">Mastery Radar</h3>
+                  <span className="text-xs text-white/35 ml-auto">
+                    {progress?.competency_mastery.length ?? 0} skills
+                  </span>
+                </div>
+                <MasteryRadar data={(progress?.competency_mastery ?? []).slice(0, 8).map(m => ({ subject: m.competency_name, mastery: Math.round(m.mastery_score * 100) }))} />
+              </motion.div>
+
+              {/* Recent activity */}
+              {progress && progress.recent_interactions.length > 0 && (
+                <motion.div
+                  className="gcard p-5"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Clock className="w-4 h-4 text-purple-400" />
+                    <h3 className="text-sm font-semibold text-white">Recent Activity</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {progress.recent_interactions.slice(0, 5).map((item, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.55 + idx * 0.06 }}
+                        className="flex items-start justify-between gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-white/80 truncate leading-tight">
+                            {item.material_title}
+                          </p>
+                          <p className="text-xs text-white/35 mt-0.5">{item.subject}</p>
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end gap-0.5">
+                          <ScoreBadge score={item.quiz_score} />
+                          {item.time_spent_seconds && (
+                            <span className="text-xs text-white/30">
+                              {Math.round(item.time_spent_seconds / 60)}m
+                            </span>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </div>
           </div>
-
-          {/* Mastery radar */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Brain className="h-5 w-5 text-blue-400" />
-              Competency Mastery
-            </h2>
-            <Card className="bg-white/5 border-white/10">
-              <CardHeader className="pb-0 pt-4 px-5">
-                <CardTitle className="text-sm text-white/60 font-normal">
-                  Radar view across {progress?.competency_mastery.length ?? 0} competencies
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-2 pb-4">
-                <MasteryRadar data={progress?.competency_mastery ?? []} />
-              </CardContent>
-            </Card>
-
-            {/* Recent activity */}
-            {progress && progress.recent_interactions.length > 0 && (
-              <Card className="bg-white/5 border-white/10">
-                <CardHeader className="pb-2 pt-4 px-5">
-                  <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
-                </CardHeader>
-                <CardContent className="px-5 pb-4 space-y-2">
-                  {progress.recent_interactions.slice(0, 4).map((i, idx) => (
-                    <div key={idx} className="flex justify-between items-start text-xs">
-                      <p className="text-white/70 truncate max-w-[160px]">{i.material_title}</p>
-                      <span className="text-white/40 shrink-0 ml-2">
-                        {i.quiz_score != null ? `${i.quiz_score}%` : "—"}
-                      </span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

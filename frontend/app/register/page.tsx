@@ -1,24 +1,85 @@
+// === FILE: app/register/page.tsx ===
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brain, Eye, EyeOff, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { motion } from "framer-motion";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
-} from "@/components/ui/card";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  Brain,
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  ArrowRight,
+  Users,
+  BookOpen,
+  TrendingUp,
+} from "lucide-react";
 import { authApi } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
 
+// ── Shared transition helper ─────────────────────────────────────────────────
+
+function fadeUpProps(delay: number = 0) {
+  return {
+    initial: { opacity: 0, y: 28 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.55, ease: "easeOut" as const, delay },
+  };
+}
+
+// ── Static data ──────────────────────────────────────────────────────────────
+
+const stats = [
+  {
+    icon: Users,
+    value: "50+",
+    label: "Active students",
+    color: "text-blue-400",
+    border: "border-blue-500/20",
+  },
+  {
+    icon: BookOpen,
+    value: "100+",
+    label: "Learning materials",
+    color: "text-purple-400",
+    border: "border-purple-500/20",
+  },
+  {
+    icon: TrendingUp,
+    value: "3",
+    label: "Grade levels covered",
+    color: "text-cyan-400",
+    border: "border-cyan-500/20",
+  },
+  {
+    icon: Brain,
+    value: "AI",
+    label: "Personalized for every learner",
+    color: "text-emerald-400",
+    border: "border-emerald-500/20",
+  },
+];
+
+const GRADES = ["S1", "S2", "S3"] as const;
+type Grade = (typeof GRADES)[number];
+type Role = "student" | "teacher";
+
+interface FormState {
+  full_name: string;
+  email: string;
+  password: string;
+  role: Role;
+  grade_level: Grade;
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({
+
+  const [form, setForm] = useState<FormState>({
     full_name: "",
     email: "",
     password: "",
@@ -29,7 +90,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function update(key: string, value: string) {
+  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -39,7 +100,10 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const payload = {
-        ...form,
+        full_name: form.full_name,
+        email: form.email,
+        password: form.password,
+        role: form.role,
         grade_level: form.role === "student" ? form.grade_level : undefined,
       };
       const data = await authApi.register(payload);
@@ -48,7 +112,9 @@ export default function RegisterPage() {
         full_name: data.full_name,
         role: data.role,
       });
-      router.push(data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
+      router.push(
+        data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard"
+      );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -57,140 +123,273 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-950 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="app-bg min-h-screen flex">
+      {/* ── Blobs ── */}
+      <div className="blob blob-purple w-[480px] h-[480px] top-[-60px] left-[-100px] opacity-55 pulse-glow" />
+      <div className="blob blob-blue w-[380px] h-[380px] top-[45%] left-[18%] opacity-35 pulse-glow" />
+      <div className="blob blob-cyan w-[280px] h-[280px] bottom-[-40px] left-[38%] opacity-30" />
+
+      {/* Dot grid */}
+      <div className="dot-grid fixed inset-0 pointer-events-none" />
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          LEFT PANEL — animated stats (hidden on mobile)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="hidden lg:flex flex-col justify-center px-16 w-[52%] min-h-screen page-wrap">
         {/* Logo */}
-        <div className="flex flex-col items-center gap-2 text-white">
-          <div className="bg-blue-500/20 border border-blue-400/30 rounded-2xl p-3">
-            <Brain className="h-8 w-8 text-blue-300" />
+        <motion.div
+          {...fadeUpProps(0)}
+          className="flex items-center gap-4 mb-10"
+        >
+          <div className="gcard p-4 glow-purple">
+            <Brain className="h-10 w-10 text-purple-400" />
           </div>
-          <span className="text-2xl font-bold">SmartSoma</span>
-          <p className="text-blue-200/70 text-sm">Create your free account</p>
+          <span className="text-4xl font-extrabold tracking-tight grad-text">
+            SmartSoma
+          </span>
+        </motion.div>
+
+        {/* Headline */}
+        <motion.h1
+          {...fadeUpProps(0.1)}
+          className="text-5xl font-extrabold text-white leading-tight mb-4"
+        >
+          Join thousands of
+          <br />
+          <span className="grad-text">Rwandan learners.</span>
+        </motion.h1>
+
+        <motion.p
+          {...fadeUpProps(0.2)}
+          className="text-white/50 text-lg mb-12 max-w-md"
+        >
+          Create your free account and get an AI-personalized learning path in
+          seconds — no credit card needed.
+        </motion.p>
+
+        {/* Stat grid */}
+        <div className="grid grid-cols-2 gap-4 max-w-sm">
+          {stats.map((s, i) => (
+            <motion.div
+              key={s.label}
+              {...fadeUpProps(0.3 + i * 0.1)}
+              className={`glass glass-hover flex flex-col gap-2 px-5 py-5 border ${s.border}`}
+            >
+              <s.icon className={`h-5 w-5 ${s.color}`} />
+              <p className="text-2xl font-extrabold text-white">{s.value}</p>
+              <p className="text-white/40 text-xs leading-tight">{s.label}</p>
+            </motion.div>
+          ))}
         </div>
+      </div>
 
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm text-white shadow-2xl">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl text-white">Get started</CardTitle>
-            <CardDescription className="text-blue-200/70">
-              Fill in your details to create an account
-            </CardDescription>
-          </CardHeader>
+      {/* ══════════════════════════════════════════════════════════════════════
+          RIGHT PANEL — registration form
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="flex-1 flex items-center justify-center px-6 py-16 page-wrap overflow-y-auto">
+        <div className="w-full max-w-md">
+          {/* Mobile logo */}
+          <motion.div
+            {...fadeUpProps(0)}
+            className="flex lg:hidden items-center justify-center gap-3 mb-8"
+          >
+            <Brain className="h-7 w-7 text-purple-400" />
+            <span className="text-2xl font-extrabold grad-text">SmartSoma</span>
+          </motion.div>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Form card */}
+          <motion.div {...fadeUpProps(0.05)} className="gcard px-8 py-10">
+            {/* Heading */}
+            <motion.div {...fadeUpProps(0.12)} className="mb-8">
+              <h2 className="text-3xl font-extrabold text-white mb-1">
+                Create your account
+              </h2>
+              <p className="text-white/45 text-sm">
+                Free forever. No payment required.
+              </p>
+            </motion.div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              {/* Error */}
               {error && (
-                <div className="bg-red-500/15 border border-red-400/30 rounded-lg px-4 py-3 text-red-300 text-sm">
-                  {error}
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className="glass px-4 py-3 border border-red-500/30 rounded-xl"
+                >
+                  <p className="text-red-400 text-sm">{error}</p>
+                </motion.div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="full_name" className="text-blue-100">Full name</Label>
-                <Input
-                  id="full_name"
+              {/* Full name */}
+              <motion.div
+                {...fadeUpProps(0.16)}
+                className="flex flex-col gap-1.5"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  Full name
+                </label>
+                <input
+                  type="text"
                   placeholder="Uwamahoro Marie"
                   value={form.full_name}
                   onChange={(e) => update("full_name", e.target.value)}
                   required
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-blue-400"
+                  className="input-premium"
                 />
-              </div>
+              </motion.div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-blue-100">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@smartsoma.rw"
-                  value={form.email}
-                  onChange={(e) => update("email", e.target.value)}
-                  required
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-blue-400"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-blue-100">Password</Label>
+              {/* Email */}
+              <motion.div
+                {...fadeUpProps(0.22)}
+                className="flex flex-col gap-1.5"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  Email address
+                </label>
                 <div className="relative">
-                  <Input
-                    id="password"
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+                  <input
+                    type="email"
+                    placeholder="you@smartsoma.rw"
+                    value={form.email}
+                    onChange={(e) => update("email", e.target.value)}
+                    required
+                    className="input-premium pl-11"
+                  />
+                </div>
+              </motion.div>
+
+              {/* Password */}
+              <motion.div
+                {...fadeUpProps(0.28)}
+                className="flex flex-col gap-1.5"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+                  <input
                     type={showPassword ? "text" : "password"}
                     placeholder="Min. 8 characters"
                     value={form.password}
                     onChange={(e) => update("password", e.target.value)}
                     minLength={8}
                     required
-                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-blue-400 pr-10"
+                    className="input-premium pl-11 pr-12"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Role */}
-              <div className="space-y-2">
-                <Label className="text-blue-100">I am a</Label>
+              {/* Role segmented control */}
+              <motion.div
+                {...fadeUpProps(0.34)}
+                className="flex flex-col gap-2"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  I am a
+                </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {["student", "teacher"].map((r) => (
+                  {(["student", "teacher"] as Role[]).map((r) => (
                     <button
                       key={r}
                       type="button"
                       onClick={() => update("role", r)}
-                      className={`py-2.5 rounded-lg border text-sm font-medium capitalize transition-colors ${
+                      className={[
+                        "py-3 rounded-xl border text-sm font-semibold capitalize transition-all duration-200",
                         form.role === r
-                          ? "bg-blue-500 border-blue-400 text-white"
-                          : "bg-white/5 border-white/20 text-white/70 hover:bg-white/10"
-                      }`}
+                          ? "btn-grad border-transparent"
+                          : "glass border-white/10 text-white/55 hover:text-white/80 hover:border-white/20",
+                      ].join(" ")}
                     >
                       {r}
                     </button>
                   ))}
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Grade — only for students */}
+              {/* Grade level — students only */}
               {form.role === "student" && (
-                <div className="space-y-2">
-                  <Label className="text-blue-100">Grade level</Label>
-                  <Select value={form.grade_level} onValueChange={(v) => update("grade_level", v)}>
-                    <SelectTrigger className="bg-white/10 border-white/20 text-white focus:ring-blue-400">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-blue-950 border-white/20 text-white">
-                      <SelectItem value="S1">S1 (Senior 1)</SelectItem>
-                      <SelectItem value="S2">S2 (Senior 2)</SelectItem>
-                      <SelectItem value="S3">S3 (Senior 3)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                  className="flex flex-col gap-2 overflow-hidden"
+                >
+                  <label className="text-white/70 text-sm font-medium">
+                    Grade level
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {GRADES.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => update("grade_level", g)}
+                        className={[
+                          "py-2.5 rounded-xl border text-sm font-semibold transition-all duration-200",
+                          form.grade_level === g
+                            ? "bg-linear-to-br from-blue-500/30 to-purple-500/20 border-blue-500/50 text-white"
+                            : "glass border-white/10 text-white/50 hover:text-white/75 hover:border-white/20",
+                        ].join(" ")}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
               )}
 
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-500 hover:bg-blue-400 text-white font-semibold h-11 mt-2"
-              >
-                {loading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating account…</>
-                ) : (
-                  "Create account"
-                )}
-              </Button>
+              {/* Submit */}
+              <motion.div {...fadeUpProps(0.42)}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-grad w-full flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {loading ? (
+                    <>
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Creating account…
+                    </>
+                  ) : (
+                    <>
+                      Create account
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </motion.div>
             </form>
 
-            <p className="text-center text-sm text-blue-200/60 mt-5">
+            {/* Login link */}
+            <motion.p
+              {...fadeUpProps(0.5)}
+              className="text-center text-sm text-white/40 mt-6"
+            >
               Already have an account?{" "}
-              <Link href="/login" className="text-blue-300 hover:text-blue-200 font-medium">
+              <Link
+                href="/login"
+                className="text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+              >
                 Sign in
               </Link>
-            </p>
-          </CardContent>
-        </Card>
+            </motion.p>
+          </motion.div>
+        </div>
       </div>
     </div>
   );
