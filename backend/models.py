@@ -7,7 +7,7 @@ Exactly mirrors the ERD from the project proposal (Chapter 3, Section 3.5.1).
 
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean,
+    Column, Index, Integer, String, Float, Boolean,
     DateTime, Text, ForeignKey
 )
 from sqlalchemy.orm import relationship
@@ -46,6 +46,11 @@ class CBCCompetency(Base):
 
 class Material(Base):
     __tablename__ = "materials"
+    __table_args__ = (
+        Index("ix_material_subject", "subject"),
+        Index("ix_material_competency_id", "competency_id"),
+        Index("ix_material_difficulty", "difficulty_level"),
+    )
 
     material_id = Column(Integer, primary_key=True, index=True)
     title = Column(String(300), nullable=False)
@@ -65,6 +70,10 @@ class Material(Base):
 
 class StudentMasteryLog(Base):
     __tablename__ = "student_mastery_logs"
+    __table_args__ = (
+        # Composite index: the most common query pattern — fetch all competencies for one student
+        Index("ix_mastery_user_competency", "user_id", "competency_id"),
+    )
 
     log_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
@@ -79,6 +88,9 @@ class StudentMasteryLog(Base):
 
 class Recommendation(Base):
     __tablename__ = "recommendations"
+    __table_args__ = (
+        Index("ix_recommendation_user_id", "user_id"),
+    )
 
     rec_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
@@ -94,6 +106,11 @@ class Recommendation(Base):
 
 class InteractionLog(Base):
     __tablename__ = "interaction_logs"
+    __table_args__ = (
+        # Composite: student history queries always filter by user + order by time
+        Index("ix_interaction_user_timestamp", "user_id", "timestamp"),
+        Index("ix_interaction_material_id", "material_id"),
+    )
 
     interaction_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)

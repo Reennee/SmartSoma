@@ -8,7 +8,7 @@ POST /api/materials/{id}/interact       — log an interaction + update mastery
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ from backend.models import (
     CBCCompetency, InteractionLog, Material,
     StudentMasteryLog, User,
 )
-from backend.schemas import MarkViewedRequest, MaterialDetail, MaterialOut
+from backend.schemas import CompetencyOut, MarkViewedRequest, MaterialDetail, MaterialOut, PagedMaterials
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
@@ -30,16 +30,28 @@ def _enrich(material: Material) -> dict:
     return d
 
 
-@router.get("", response_model=list[MaterialOut])
+@router.get("/competencies", response_model=list[CompetencyOut])
+def list_competencies(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Return all CBC competencies (used by the test-upload form)."""
+    rows = db.query(CBCCompetency).order_by(CBCCompetency.grade_level, CBCCompetency.competency_name).all()
+    return [{"competency_id": r.competency_id, "competency_name": r.competency_name, "grade_level": r.grade_level} for r in rows]
+
+
+@router.get("", response_model=PagedMaterials)
 def list_materials(
     subject: Optional[str] = None,
     grade_level: Optional[str] = None,
     difficulty_level: Optional[str] = None,
     competency_id: Optional[int] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(12, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Return materials, optionally filtered by subject / grade / difficulty / competency."""
+    """Return a page of materials, optionally filtered."""
     q = db.query(Material)
     if subject:
         q = q.filter(Material.subject == subject)
@@ -50,8 +62,9 @@ def list_materials(
     if grade_level:
         q = q.join(CBCCompetency).filter(CBCCompetency.grade_level == grade_level)
 
-    materials = q.all()
-    return [_enrich(m) for m in materials]
+    total = q.count()
+    materials = q.offset(skip).limit(limit).all()
+    return {"items": [_enrich(m) for m in materials], "total": total, "skip": skip, "limit": limit}
 
 
 @router.get("/{material_id}", response_model=MaterialDetail)

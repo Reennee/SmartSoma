@@ -34,8 +34,7 @@ wheels/
 *.ipynb_checkpoints/
 
 # PyTorch model weights (large binary — use git-lfs or exclude)
-*.pth
-backend/models/*.pth
+# *.pth  ← re-enabled so Railway gets the BiLSTM model
 
 # Environment variables
 .env

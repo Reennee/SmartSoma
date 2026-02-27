@@ -88,6 +88,13 @@ class MaterialDetail(MaterialOut):
     file_path: Optional[str]
 
 
+class PagedMaterials(BaseModel):
+    items: List[MaterialOut]
+    total: int
+    skip: int
+    limit: int
+
+
 # ─── Recommendations ─────────────────────────────────────────────────────────
 
 class RecommendationRequest(BaseModel):
@@ -165,6 +172,32 @@ class ClassAnalyticsOut(BaseModel):
     total_interactions: int
     students: List[StudentSummary]
     competency_heatmap: List[CompetencyHeatmapRow]
+
+
+# ─── Test Result Upload ──────────────────────────────────────────────────────
+
+class TestResultEntry(BaseModel):
+    """A single competency score from an external exam (0–100)."""
+    competency_name: str
+    score: float  # 0–100
+
+    @field_validator("score")
+    @classmethod
+    def score_must_be_valid(cls, v: float) -> float:
+        if not 0 <= v <= 100:
+            raise ValueError("score must be between 0 and 100")
+        return v
+
+
+class TestUploadRequest(BaseModel):
+    results: List[TestResultEntry]
+
+
+class TestUploadResponse(BaseModel):
+    updated: int           # competencies successfully updated
+    skipped: int           # competency names not found in DB
+    new_overall_mastery: float
+    updated_competencies: List[MasteryEntry]
 
 
 # ─── System ──────────────────────────────────────────────────────────────────
