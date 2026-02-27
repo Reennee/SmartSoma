@@ -21,9 +21,8 @@ pydantic[email]==2.6.3
 python-dotenv==1.0.1
 
 # ─── Machine Learning ─────────────────────────────────────────────────────────
-# CPU-only torch wheel (smaller, faster to install on Railway)
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.1.0+cpu
+# Use standard CPU-only PyTorch from PyPI (compatible with Railway)
+torch==2.1.0
 numpy==1.24.3
 pandas==2.0.3
 scikit-learn==1.3.0
