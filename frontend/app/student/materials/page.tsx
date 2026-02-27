@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, BookOpen, Clock, Zap, Filter } from "lucide-react";
+import { Search, BookOpen, Clock, Zap, Filter, Upload, ChevronDown } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import {
   Select,
@@ -14,29 +14,22 @@ import {
 } from "@/components/ui/select";
 import { materialsApi, type MaterialOut } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
+import TestUploadModal from "@/components/TestUploadModal";
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
 
 const subjectColors: Record<string, string> = {
-  Mathematics:
-    "bg-blue-500/15 text-blue-300 border-blue-500/25",
-  Physics:
-    "bg-purple-500/15 text-purple-300 border-purple-500/25",
-  Chemistry:
-    "bg-cyan-500/15 text-cyan-300 border-cyan-500/25",
-  Biology:
-    "bg-green-500/15 text-green-300 border-green-500/25",
-  English:
-    "bg-yellow-500/15 text-yellow-300 border-yellow-500/25",
+  Mathematics: "bg-blue-500/15 text-blue-300 border-blue-500/25",
+  Physics:     "bg-purple-500/15 text-purple-300 border-purple-500/25",
+  Chemistry:   "bg-cyan-500/15 text-cyan-300 border-cyan-500/25",
+  Biology:     "bg-green-500/15 text-green-300 border-green-500/25",
+  English:     "bg-yellow-500/15 text-yellow-300 border-yellow-500/25",
 };
 
 const difficultyColors: Record<string, string> = {
-  Beginner:
-    "bg-green-500/15 text-green-300 border-green-500/25",
-  Intermediate:
-    "bg-yellow-500/15 text-yellow-300 border-yellow-500/25",
-  Advanced:
-    "bg-red-500/15 text-red-300 border-red-500/25",
+  Beginner:     "bg-green-500/15 text-green-300 border-green-500/25",
+  Intermediate: "bg-yellow-500/15 text-yellow-300 border-yellow-500/25",
+  Advanced:     "bg-red-500/15 text-red-300 border-red-500/25",
 };
 
 const contentTypeIcons: Record<string, string> = {
@@ -47,6 +40,8 @@ const contentTypeIcons: Record<string, string> = {
 
 const DIFFICULTIES = ["All", "Beginner", "Intermediate", "Advanced"] as const;
 type Difficulty = (typeof DIFFICULTIES)[number];
+
+const PAGE_SIZE = 12;
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -93,32 +88,26 @@ function MaterialCard({ material: m, index, interacting, done, onStudy }: Materi
       className="gcard p-5 flex flex-col gap-4 h-full"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.07 }}
+      transition={{ delay: Math.min(index * 0.05, 0.4) }}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
     >
       {/* Top row: type emoji + difficulty badge */}
       <div className="flex items-start justify-between gap-2">
         <span className="text-2xl leading-none">{typeEmoji}</span>
-        <span
-          className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${diffCls}`}
-        >
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${diffCls}`}>
           {m.difficulty_level}
         </span>
       </div>
 
       {/* Title */}
       <div className="flex-1 space-y-1.5">
-        <h3 className="text-sm font-bold text-white leading-snug line-clamp-2">
-          {m.title}
-        </h3>
+        <h3 className="text-sm font-bold text-white leading-snug line-clamp-2">{m.title}</h3>
         <p className="text-xs text-white/40 truncate">{m.competency_name}</p>
       </div>
 
       {/* Subject + duration row */}
       <div className="flex items-center justify-between gap-2">
-        <span
-          className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${subjectCls}`}
-        >
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${subjectCls}`}>
           {m.subject}
         </span>
         {m.duration_minutes != null && (
@@ -135,44 +124,21 @@ function MaterialCard({ material: m, index, interacting, done, onStudy }: Materi
         onClick={() => onStudy(m)}
         disabled={interacting || done}
         className={`btn-grad w-full py-2 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none ${
-          done
-            ? "bg-linear-to-br from-green-500 to-emerald-600 shadow-green-500/30"
-            : ""
+          done ? "bg-linear-to-br from-green-500 to-emerald-600 shadow-green-500/30" : ""
         }`}
       >
         {interacting ? (
           <>
-            <svg
-              className="w-3.5 h-3.5 animate-spin"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8H4z"
-              />
+            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
             Logging…
           </>
         ) : done ? (
-          <>
-            <Zap className="w-3.5 h-3.5" />
-            Studied!
-          </>
+          <><Zap className="w-3.5 h-3.5" />Studied!</>
         ) : (
-          <>
-            <BookOpen className="w-3.5 h-3.5" />
-            Study this
-          </>
+          <><BookOpen className="w-3.5 h-3.5" />Study this</>
         )}
       </button>
     </motion.div>
@@ -183,11 +149,18 @@ function MaterialCard({ material: m, index, interacting, done, onStudy }: Materi
 
 export default function MaterialsPage() {
   const router = useRouter();
-  const user = getUser();
+  const user = useSyncExternalStore(
+    (cb) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); },
+    getUser,
+    () => null,
+  );
 
   const [materials, setMaterials] = useState<MaterialOut[]>([]);
-  const [filtered, setFiltered] = useState<MaterialOut[]>([]);
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
+
   const [interacting, setInteracting] = useState<number | null>(null);
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
   const [flashId, setFlashId] = useState<number | null>(null);
@@ -196,65 +169,73 @@ export default function MaterialsPage() {
   const [subject, setSubject] = useState("all");
   const [difficulty, setDifficulty] = useState<Difficulty>("All");
 
-  // Fetch materials
+  const [showUpload, setShowUpload] = useState(false);
+
+  // Derived unique subjects from loaded materials
+  const subjects = Array.from(new Set(materials.map((m) => m.subject))).sort();
+
+  // Client-side filter of what we've loaded
+  const filtered = materials.filter((m) => {
+    if (subject !== "all" && m.subject !== subject) return false;
+    if (difficulty !== "All" && m.difficulty_level !== difficulty) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      if (!m.title.toLowerCase().includes(q) && !(m.competency_name?.toLowerCase().includes(q) ?? false)) return false;
+    }
+    return true;
+  });
+
+  function buildParams(newSkip: number) {
+    return {
+      grade_level: user?.role === "student" ? (user as { grade_level?: string }).grade_level ?? undefined : undefined,
+      skip: newSkip,
+      limit: PAGE_SIZE,
+    };
+  }
+
+  // Initial load
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
-    const gradeParam =
-      user?.role === "student"
-        ? (user as { grade_level?: string }).grade_level ?? undefined
-        : undefined;
-
     materialsApi
-      .list({ grade_level: gradeParam })
+      .list(buildParams(0))
       .then((data) => {
-        setMaterials(data);
-        setFiltered(data);
+        setMaterials(data.items);
+        setTotal(data.total);
+        setSkip(0);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [router, user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
-  // Filter
-  useEffect(() => {
-    let result = materials;
-    if (subject !== "all") result = result.filter((m) => m.subject === subject);
-    if (difficulty !== "All") result = result.filter((m) => m.difficulty_level === difficulty);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (m) =>
-          m.title.toLowerCase().includes(q) ||
-          (m.competency_name?.toLowerCase().includes(q) ?? false)
-      );
-    }
-    setFiltered(result);
-  }, [materials, subject, difficulty, search]);
-
-  // Collect unique subjects
-  const subjects = Array.from(new Set(materials.map((m) => m.subject))).sort();
+  async function loadMore() {
+    const nextSkip = skip + PAGE_SIZE;
+    setLoadingMore(true);
+    try {
+      const data = await materialsApi.list(buildParams(nextSkip));
+      setMaterials((prev) => [...prev, ...data.items]);
+      setSkip(nextSkip);
+    } catch { /* silent */ }
+    finally { setLoadingMore(false); }
+  }
 
   async function handleStudy(m: MaterialOut) {
     setInteracting(m.material_id);
     try {
-      await materialsApi.interact(m.material_id, {
-        time_spent_seconds: 300,
-        quiz_score: 70,
-      });
+      await materialsApi.interact(m.material_id, { time_spent_seconds: 300, quiz_score: 70 });
       setDoneIds((prev) => new Set(prev).add(m.material_id));
       setFlashId(m.material_id);
       setTimeout(() => setFlashId(null), 2000);
-    } catch {
-      /* silent */
-    } finally {
-      setInteracting(null);
-    }
+    } catch { /* silent */ }
+    finally { setInteracting(null); }
   }
+
+  const hasMore = materials.length < total;
 
   if (loading) return <MaterialsSkeleton />;
 
   return (
     <div className="app-bg">
-      {/* Blobs */}
       <div className="blob blob-blue  w-[520px] h-[520px] top-[-110px] left-[-130px] opacity-35" />
       <div className="blob blob-purple w-[400px] h-[400px] top-[300px] right-[-90px] opacity-28" />
       <div className="blob blob-cyan   w-[280px] h-[280px] bottom-[100px] left-[40%] opacity-20" />
@@ -270,17 +251,32 @@ export default function MaterialsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            className="flex items-start justify-between gap-4 flex-wrap"
           >
-            <p className="text-sm text-white/40 font-medium tracking-wide uppercase mb-1">
-              CBC-aligned resources
-            </p>
-            <h1 className="text-3xl sm:text-4xl font-bold text-white">
-              Browse&nbsp;<span className="grad-text">Materials</span>
-            </h1>
-            <p className="mt-2 text-white/40 text-sm">
-              {filtered.length} resource{filtered.length !== 1 ? "s" : ""} available
-              {subject !== "all" ? ` in ${subject}` : ""}
-            </p>
+            <div>
+              <p className="text-sm text-white/40 font-medium tracking-wide uppercase mb-1">
+                CBC-aligned resources
+              </p>
+              <h1 className="text-3xl sm:text-4xl font-bold text-white">
+                Browse&nbsp;<span className="grad-text">Materials</span>
+              </h1>
+              <p className="mt-2 text-white/40 text-sm">
+                Showing {filtered.length} of {total} resource{total !== 1 ? "s" : ""}
+                {subject !== "all" ? ` in ${subject}` : ""}
+              </p>
+            </div>
+
+            {/* Upload Test Results button */}
+            <motion.button
+              type="button"
+              onClick={() => setShowUpload(true)}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl btn-grad text-sm font-semibold shrink-0"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Test Results
+            </motion.button>
           </motion.div>
 
           {/* ── Filter bar ── */}
@@ -291,7 +287,6 @@ export default function MaterialsPage() {
             transition={{ delay: 0.15 }}
           >
             <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-              {/* Search */}
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/35 pointer-events-none" />
                 <input
@@ -303,7 +298,6 @@ export default function MaterialsPage() {
                 />
               </div>
 
-              {/* Subject dropdown */}
               <Select value={subject} onValueChange={setSubject}>
                 <SelectTrigger className="w-full sm:w-[160px] glass-sm border-white/10 text-white text-sm rounded-xl h-[52px]">
                   <Filter className="w-3.5 h-3.5 text-white/40 mr-1.5 shrink-0" />
@@ -312,14 +306,11 @@ export default function MaterialsPage() {
                 <SelectContent className="bg-[#0d1b35] border-white/12 text-white">
                   <SelectItem value="all">All subjects</SelectItem>
                   {subjects.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              {/* Difficulty pills */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 {DIFFICULTIES.map((d) => (
                   <button
@@ -350,7 +341,7 @@ export default function MaterialsPage() {
                 className="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-sm px-5 py-3 rounded-2xl flex items-center gap-2 border border-green-500/30 text-green-300 text-sm font-semibold shadow-2xl"
               >
                 <Zap className="w-4 h-4" />
-                Session logged successfully!
+                Session logged — mastery updated!
               </motion.div>
             )}
           </AnimatePresence>
@@ -392,8 +383,42 @@ export default function MaterialsPage() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* ── Load More ── */}
+          {hasMore && (
+            <motion.div
+              className="flex flex-col items-center gap-2 pt-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <p className="text-xs text-white/30">
+                Loaded {materials.length} of {total} materials
+              </p>
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl glass-sm border border-white/10 text-sm font-medium text-white/60 hover:text-white hover:border-white/20 transition-all disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Loading…
+                  </>
+                ) : (
+                  <><ChevronDown className="w-4 h-4" />Load more</>
+                )}
+              </button>
+            </motion.div>
+          )}
         </main>
       </div>
+
+      {/* ── Test Upload Modal ── */}
+      <TestUploadModal open={showUpload} onClose={() => setShowUpload(false)} />
     </div>
   );
 }

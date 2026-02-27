@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, BookOpen, Brain, Clock, Sparkles } from "lucide-react";
@@ -19,18 +19,23 @@ import { getToken, getUser } from "@/lib/auth";
 
 function useCounter(target: number, duration = 1200) {
   const [value, setValue] = useState(0);
+  const valueRef = useRef(0);
   const frameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (target === 0) { setValue(0); return; }
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+
     const start = performance.now();
-    const from = 0;
+    const from = valueRef.current;
+    if (from === target) return;
 
     function tick(now: number) {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(from + (target - from) * eased));
+      const next = Math.round(from + (target - from) * eased);
+      valueRef.current = next;
+      setValue(next);
       if (progress < 1) frameRef.current = requestAnimationFrame(tick);
     }
 
@@ -147,7 +152,11 @@ export default function StudentDashboard() {
   const [progress, setProgress] = useState<StudentProgressOut | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const user = getUser();
+  const user = useSyncExternalStore(
+    (cb) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); },
+    getUser,
+    () => null,
+  );
 
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
@@ -210,10 +219,7 @@ export default function StudentDashboard() {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-2 glass-sm px-4 py-2 rounded-2xl">
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-              <span className="text-sm text-white/70 font-medium">AI-powered dashboard</span>
-            </div>
+            
           </motion.div>
 
           {/* ── Stats row ── */}

@@ -2,7 +2,7 @@
 
 // === FILE: app/teacher/dashboard/page.tsx ===
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -114,17 +114,30 @@ function StudentPanel({
   studentId: number;
   onClose: () => void;
 }) {
-  const [data, setData] = useState<StudentProgressOut | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<{
+    studentId: number;
+    data: StudentProgressOut | null;
+  }>(() => ({ studentId, data: null }));
 
   useEffect(() => {
-    setLoading(true);
-    setData(null);
+    let cancelled = false;
     studentApi
       .studentProgress(studentId)
-      .then(setData)
-      .finally(() => setLoading(false));
+      .then((d) => {
+        if (cancelled) return;
+        setState({ studentId, data: d });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState({ studentId, data: null });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [studentId]);
+
+  const loading = state.studentId !== studentId || state.data === null;
+  const data = state.studentId === studentId ? state.data : null;
 
   const topCompetencies = data
     ? [...data.competency_mastery]
@@ -324,7 +337,11 @@ export default function TeacherDashboardPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const user = getUser();
+  const user = useSyncExternalStore(
+    (cb) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); },
+    getUser,
+    () => null,
+  );
 
   const avgMastery =
     data && data.students.length > 0

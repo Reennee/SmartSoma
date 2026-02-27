@@ -1,7 +1,7 @@
 // === FILE: components/Navbar.tsx ===
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +15,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { clearAuth, getUser, type StoredUser } from "@/lib/auth";
+import { clearAuth, getUser } from "@/lib/auth";
 
 interface NavLink {
   href: string;
@@ -37,12 +37,12 @@ const teacherLinks: NavLink[] = [
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<StoredUser | null>(null);
+  const user = useSyncExternalStore(
+    (cb) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); },
+    getUser,
+    () => null,
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    setUser(getUser());
-  }, []);
 
   function logout() {
     clearAuth();

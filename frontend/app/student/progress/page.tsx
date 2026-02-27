@@ -22,16 +22,22 @@ import { getToken } from "@/lib/auth";
 
 function useCounter(target: number, duration = 1100) {
   const [value, setValue] = useState(0);
+  const valueRef = useRef(0);
   const frameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (target === 0) { setValue(0); return; }
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+
     const start = performance.now();
+    const from = valueRef.current;
+    if (from === target) return;
 
     function tick(now: number) {
       const progress = Math.min((now - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(target * eased));
+      const next = Math.round(from + (target - from) * eased);
+      valueRef.current = next;
+      setValue(next);
       if (progress < 1) frameRef.current = requestAnimationFrame(tick);
     }
 
