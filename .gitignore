@@ -33,9 +33,9 @@ wheels/
 .ipynb_checkpoints
 *.ipynb_checkpoints/
 
-# PyTorch
+# PyTorch model weights (large binary — use git-lfs or exclude)
 *.pth
-models/*.pth
+backend/models/*.pth
 
 # Environment variables
 .env

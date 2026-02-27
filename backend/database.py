@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./smartsoma.db")
+_here = os.path.dirname(__file__)
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(_here, 'smartsoma.db')}")
 
 # SQLite needs check_same_thread=False; PostgreSQL doesn't need it
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

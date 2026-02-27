@@ -11,13 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first (layer cache)
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source
+# Copy source (data and models now live inside backend/)
 COPY backend/ ./backend/
-COPY data/    ./data/
-COPY models/  ./models/
 
 # Expose default port (Railway overrides via $PORT env var)
 EXPOSE 8000

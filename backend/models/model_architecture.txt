@@ -1,0 +1,11 @@
+BiLSTM_DKT(
+  (bilstm): LSTM(4, 128, num_layers=2, batch_first=True, dropout=0.3, bidirectional=True)
+  (fc1): Linear(in_features=256, out_features=64, bias=True)
+  (fc2): Linear(in_features=64, out_features=1, bias=True)
+  (relu): ReLU()
+  (sigmoid): Sigmoid()
+  (dropout): Dropout(p=0.3, inplace=False)
+)
+
+Total Parameters: 548,993
+Trainable Parameters: 548,993

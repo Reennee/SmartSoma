@@ -76,7 +76,7 @@ class DKTService:
 
         path = model_path or os.getenv(
             "MODEL_PATH",
-            os.path.join(os.path.dirname(__file__), "../../models/bilstm_dkt_model.pth"),
+            os.path.join(os.path.dirname(__file__), "../models/bilstm_dkt_model.pth"),
         )
         path = os.path.abspath(path)
 

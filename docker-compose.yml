@@ -45,14 +45,13 @@ services:
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: "480"
       CORS_ORIGINS: "http://localhost:3000"
-      MODEL_PATH: /app/models/bilstm_dkt_model.pth
+      MODEL_PATH: /app/backend/models/bilstm_dkt_model.pth
       ENVIRONMENT: development
     ports:
       - "8000:8000"
     volumes:
       # Hot-reload for development (remove for production)
       - ./backend:/app/backend
-      - ./data:/app/data
 
 volumes:
   postgres_data:

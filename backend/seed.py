@@ -23,7 +23,7 @@ from backend.models import (
 )
 from backend.auth import hash_password
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path(__file__).parent / "data"
 
 
 def create_tables():
