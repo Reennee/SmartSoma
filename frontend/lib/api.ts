@@ -28,12 +28,14 @@ export interface UserOut {
 export interface RecommendedMaterial {
   material_id: number;
   title: string;
+  description: string | null;
   subject: string;
   competency_name: string;
   grade_level: string;
   difficulty_level: string;
   content_type: string | null;
   duration_minutes: number | null;
+  file_url: string | null;
   confidence_score: number;
   current_mastery: number;
 }
@@ -88,12 +90,14 @@ export interface ClassAnalyticsOut {
 export interface MaterialOut {
   material_id: number;
   title: string;
+  description: string | null;
   subject: string;
   competency_id: number;
   competency_name: string;
   difficulty_level: string;
   content_type: string | null;
   duration_minutes: number | null;
+  file_url: string | null;
 }
 
 export interface PagedMaterials {
@@ -107,6 +111,7 @@ export interface CompetencyOut {
   competency_id: number;
   competency_name: string;
   grade_level: string;
+  subject: string | null;
 }
 
 export interface TestResultEntry {
@@ -126,6 +131,46 @@ export interface SystemStats {
   materials: number;
   interactions: number;
   competencies: number;
+}
+
+export interface MaterialPreviewResponse {
+  title: string | null;
+  description: string | null;
+  subject: string | null;
+  competency_name: string | null;
+  grade_level: string | null;
+  difficulty_level: string | null;
+  content_type: string | null;
+  duration_minutes: number | null;
+  file_url: string;
+  link_type: "youtube" | "pdf" | "webpage";
+}
+
+export interface MaterialCreate {
+  title: string;
+  description?: string;
+  file_url?: string;
+  subject: string;
+  competency_id: number;
+  difficulty_level: string;
+  content_type?: string;
+  duration_minutes?: number;
+}
+
+export interface SubjectGradeEntry {
+  subject: string;
+  grade: number; // 0–100
+}
+
+export interface SubjectGradeOut {
+  subject: string;
+  grade: number;
+  last_updated: string;
+}
+
+export interface SubjectGradeUploadResponse {
+  saved: number;
+  subject_grades: SubjectGradeOut[];
 }
 
 // ─── Client ───────────────────────────────────────────────────────────────────
@@ -199,6 +244,15 @@ export const studentApi = {
       method: "POST",
       body: JSON.stringify({ results }),
     }),
+
+  uploadSubjectGrades: (grades: SubjectGradeEntry[]) =>
+    request<SubjectGradeUploadResponse>("/api/students/me/subject-grades", {
+      method: "POST",
+      body: JSON.stringify({ grades }),
+    }),
+
+  getSubjectGrades: () =>
+    request<SubjectGradeOut[]>("/api/students/me/subject-grades"),
 };
 
 // ─── Materials ───────────────────────────────────────────────────────────────
@@ -226,6 +280,18 @@ export const materialsApi = {
       `/api/materials/${material_id}/interact`,
       { method: "POST", body: JSON.stringify({ material_id, ...data }) }
     ),
+
+  preview: (url: string) =>
+    request<MaterialPreviewResponse>("/api/materials/preview", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }),
+
+  create: (data: MaterialCreate) =>
+    request<MaterialOut>("/api/materials", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // ─── Analytics ───────────────────────────────────────────────────────────────

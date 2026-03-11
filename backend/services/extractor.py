@@ -1,0 +1,226 @@
+"""
+URL Content Extractor + Claude AI Metadata Extractor
+Supports YouTube, PDF, and general web pages.
+"""
+
+import json
+import logging
+import os
+import re
+from html.parser import HTMLParser
+from typing import Optional
+from urllib.parse import urlparse
+
+import requests
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+
+# ── Simple HTML text extractor ─────────────────────────────────────────────────
+
+class _TextExtractor(HTMLParser):
+    SKIP_TAGS = {"script", "style", "head", "noscript", "nav", "footer", "header"}
+
+    def __init__(self):
+        super().__init__()
+        self._skip_depth = 0
+        self.title: Optional[str] = None
+        self.description: Optional[str] = None
+        self._in_title = False
+        self._chunks: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs_dict = dict(attrs)
+        if tag in self.SKIP_TAGS:
+            self._skip_depth += 1
+        if tag == "title":
+            self._in_title = True
+        if tag == "meta":
+            name = attrs_dict.get("name", "").lower()
+            prop = attrs_dict.get("property", "").lower()
+            if name in ("description", "og:description") or prop in ("og:description",):
+                self.description = attrs_dict.get("content", "")
+
+    def handle_endtag(self, tag):
+        if tag in self.SKIP_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title and not self.title:
+            self.title = data.strip()
+        if self._skip_depth == 0:
+            text = data.strip()
+            if text:
+                self._chunks.append(text)
+
+    @property
+    def body_text(self) -> str:
+        return " ".join(self._chunks)
+
+
+# ── URL content fetcher ────────────────────────────────────────────────────────
+
+_YOUTUBE_RE = re.compile(
+    r"(?:youtube\.com/(?:watch\?v=|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})"
+)
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; SmartSomaBot/1.0; "
+        "+https://smartsoma.app)"
+    )
+}
+
+
+def fetch_url_content(url: str) -> dict:
+    """
+    Fetch metadata from a URL.  Returns a dict with keys:
+      link_type  ("youtube" | "pdf" | "webpage")
+      title, description, body_text, url
+    Raises HTTPException(400) if the URL cannot be reached.
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+
+        # ── YouTube ────────────────────────────────────────────────────────────
+        if _YOUTUBE_RE.search(url) or "youtube.com" in hostname or "youtu.be" in hostname:
+            oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
+            r = requests.get(oembed_url, timeout=8, headers=_HEADERS)
+            r.raise_for_status()
+            data = r.json()
+            return {
+                "link_type": "youtube",
+                "title": data.get("title", ""),
+                "description": f"Video by {data.get('author_name', 'Unknown')}",
+                "body_text": data.get("title", ""),
+                "url": url,
+            }
+
+        # ── HEAD request to detect PDF ─────────────────────────────────────────
+        head = requests.head(url, timeout=8, headers=_HEADERS, allow_redirects=True)
+        ct = head.headers.get("content-type", "").lower()
+        if "application/pdf" in ct or url.lower().endswith(".pdf"):
+            # Extract filename from URL path as title hint
+            path = parsed.path.rstrip("/")
+            filename = path.split("/")[-1].replace(".pdf", "").replace("-", " ").replace("_", " ").title()
+            return {
+                "link_type": "pdf",
+                "title": filename,
+                "description": "",
+                "body_text": f"PDF document: {filename}",
+                "url": url,
+            }
+
+        # ── General web page ───────────────────────────────────────────────────
+        r = requests.get(url, timeout=8, headers=_HEADERS)
+        r.raise_for_status()
+        parser = _TextExtractor()
+        parser.feed(r.text[:80_000])   # cap at 80 KB to stay fast
+        body = parser.body_text[:1500]
+
+        return {
+            "link_type": "webpage",
+            "title": parser.title or "",
+            "description": parser.description or "",
+            "body_text": body,
+            "url": url,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("fetch_url_content failed for %s: %s", url, exc)
+        raise HTTPException(status_code=400, detail=f"Could not fetch URL: {exc}")
+
+
+# ── Claude AI metadata extractor ───────────────────────────────────────────────
+
+_SYSTEM_PROMPT = """You are a curriculum metadata extractor for a Rwandan secondary-school learning platform.
+Given a web page title, description, and body text, extract structured metadata.
+Respond ONLY with a valid JSON object — no markdown, no explanation."""
+
+_VALID_SUBJECTS = ["Mathematics", "Physics"]
+_VALID_GRADES = ["S1", "S2", "S3"]
+_VALID_DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"]
+_VALID_CONTENT_TYPES = ["PDF", "Video", "Article", "Interactive Exercise"]
+
+
+def extract_metadata(url: str, raw: dict, competencies: list[str]) -> dict:
+    """
+    Call Claude Haiku to extract structured metadata from fetched URL content.
+    Returns a dict ready to be serialised as MaterialPreviewResponse.
+    Fields Claude cannot determine are set to None.
+    Raises HTTPException(503) if ANTHROPIC_API_KEY is missing.
+    Raises HTTPException(502) if the Claude call fails.
+    """
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="AI extraction not configured — set ANTHROPIC_API_KEY in .env",
+        )
+
+    competency_list = "\n".join(f"  - {c}" for c in competencies)
+
+    user_message = f"""Extract metadata for this learning resource:
+
+URL: {raw['url']}
+Link type: {raw['link_type']}
+Title: {raw['title']}
+Description: {raw['description']}
+Body text (first 1500 chars): {raw['body_text']}
+
+Valid subjects: {_VALID_SUBJECTS}
+Valid grade levels: {_VALID_GRADES}
+Valid difficulty levels: {_VALID_DIFFICULTIES}
+Valid content types: {_VALID_CONTENT_TYPES}
+
+Valid competency names (pick the closest match or null):
+{competency_list}
+
+Return JSON with exactly these keys (use null for unknown fields):
+{{
+  "title": "...",
+  "description": "one or two sentences describing the material",
+  "subject": "Mathematics" or "Physics" or null,
+  "competency_name": "<exact name from the list above>" or null,
+  "grade_level": "S1" or "S2" or "S3" or null,
+  "difficulty_level": "Beginner" or "Intermediate" or "Advanced" or null,
+  "content_type": "PDF" or "Video" or "Article" or "Interactive Exercise" or null,
+  "duration_minutes": integer or null
+}}"""
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        raw_json = message.content[0].text.strip()
+        # Strip any accidental markdown fences
+        raw_json = re.sub(r"^```(?:json)?\s*", "", raw_json)
+        raw_json = re.sub(r"\s*```$", "", raw_json)
+        extracted = json.loads(raw_json)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Claude extraction failed: %s", exc)
+        raise HTTPException(status_code=502, detail="AI extraction failed — fill fields manually")
+
+    return {
+        "title": extracted.get("title") or raw["title"] or None,
+        "description": extracted.get("description") or None,
+        "subject": extracted.get("subject") if extracted.get("subject") in _VALID_SUBJECTS else None,
+        "competency_name": extracted.get("competency_name") if extracted.get("competency_name") in competencies else None,
+        "grade_level": extracted.get("grade_level") if extracted.get("grade_level") in _VALID_GRADES else None,
+        "difficulty_level": extracted.get("difficulty_level") if extracted.get("difficulty_level") in _VALID_DIFFICULTIES else None,
+        "content_type": extracted.get("content_type") if extracted.get("content_type") in _VALID_CONTENT_TYPES else None,
+        "duration_minutes": extracted.get("duration_minutes") if isinstance(extracted.get("duration_minutes"), int) else None,
+        "file_url": url,
+        "link_type": raw["link_type"],
+    }

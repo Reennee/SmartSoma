@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import Navbar from "@/components/Navbar";
 import MasteryRadar from "@/components/MasteryRadar";
-import { studentApi, type StudentProgressOut } from "@/lib/api";
+import { studentApi, type StudentProgressOut, type SubjectGradeOut } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 
 // ─── Animated counter ─────────────────────────────────────────────────────────
@@ -149,12 +149,16 @@ function barTooltipFormatter(v: number | undefined): [string, string] {
 export default function ProgressPage() {
   const router = useRouter();
   const [progress, setProgress] = useState<StudentProgressOut | null>(null);
+  const [subjectGrades, setSubjectGrades] = useState<SubjectGradeOut[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
-    studentApi.myProgress()
-      .then(setProgress)
+    Promise.all([
+      studentApi.myProgress(),
+      studentApi.getSubjectGrades().catch(() => [] as SubjectGradeOut[]),
+    ])
+      .then(([prog, grades]) => { setProgress(prog); setSubjectGrades(grades); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [router]);
@@ -323,6 +327,47 @@ export default function ProgressPage() {
               <MasteryRadar data={(progress?.competency_mastery ?? []).slice(0, 8).map(m => ({ subject: m.competency_name, mastery: Math.round(m.mastery_score * 100) }))} />
             </motion.div>
           </div>
+
+          {/* ── Subject Grades ── */}
+          {subjectGrades.length > 0 && (
+            <motion.div
+              className="gcard p-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.38 }}
+            >
+              <div className="flex items-center gap-2 mb-5">
+                <BookOpen className="w-4 h-4 text-purple-400" />
+                <h2 className="text-sm font-semibold text-white">Report Card Grades</h2>
+                <span className="text-xs text-white/35 ml-auto">{subjectGrades.length} subjects</span>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {subjectGrades.map((g, idx) => {
+                  const pct = Math.round(g.grade);
+                  const color =
+                    pct >= 80 ? "from-green-500/20 to-green-600/10 border-green-500/20 text-green-300"
+                    : pct >= 60 ? "from-blue-500/20 to-blue-600/10 border-blue-500/20 text-blue-300"
+                    : pct >= 40 ? "from-yellow-500/20 to-yellow-600/10 border-yellow-500/20 text-yellow-300"
+                    : "from-red-500/20 to-red-600/10 border-red-500/20 text-red-300";
+                  return (
+                    <motion.div
+                      key={g.subject}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.4 + idx * 0.05 }}
+                      className={`bg-linear-to-br ${color} border rounded-xl p-4`}
+                    >
+                      <p className="text-xs text-white/50 truncate mb-1">{g.subject}</p>
+                      <p className="text-2xl font-bold">{pct}%</p>
+                      <p className="text-xs text-white/30 mt-1">
+                        {pct >= 80 ? "Excellent" : pct >= 60 ? "Good" : pct >= 40 ? "Fair" : "Needs work"}
+                      </p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
 
           {/* ── Recent sessions ── */}
           {progress && progress.recent_interactions.length > 0 && (

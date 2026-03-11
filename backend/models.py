@@ -1,14 +1,14 @@
 """
 SmartSoma ORM Models
 Exactly mirrors the ERD from the project proposal (Chapter 3, Section 3.5.1).
-6 tables: users, cbc_competencies, materials, student_mastery_logs,
-          recommendations, interaction_logs
+7 tables: users, cbc_competencies, materials, student_mastery_logs,
+          recommendations, interaction_logs, student_subject_grades
 """
 
 from datetime import datetime
 from sqlalchemy import (
     Column, Index, Integer, String, Float, Boolean,
-    DateTime, Text, ForeignKey
+    DateTime, Text, ForeignKey, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from backend.database import Base
@@ -29,6 +29,7 @@ class User(Base):
     mastery_logs = relationship("StudentMasteryLog", back_populates="user")
     recommendations = relationship("Recommendation", back_populates="user")
     interactions = relationship("InteractionLog", back_populates="user")
+    subject_grades = relationship("StudentSubjectGrade", back_populates="user")
 
 
 class CBCCompetency(Base):
@@ -54,7 +55,9 @@ class Material(Base):
 
     material_id = Column(Integer, primary_key=True, index=True)
     title = Column(String(300), nullable=False)
-    file_path = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)               # Short summary of what the unit covers
+    file_path = Column(String(500), nullable=True)          # Local path (after PDF downloaded)
+    file_url = Column(String(500), nullable=True)           # External URL (REB portal link)
     subject = Column(String(100), nullable=False)           # Mathematics | Physics
     competency_id = Column(Integer, ForeignKey("cbc_competencies.competency_id"), nullable=False)
     difficulty_level = Column(String(20), nullable=False)   # Beginner | Intermediate | Advanced
@@ -102,6 +105,23 @@ class Recommendation(Base):
     # Relationships
     user = relationship("User", back_populates="recommendations")
     material = relationship("Material", back_populates="recommendations")
+
+
+class StudentSubjectGrade(Base):
+    """Stores a student's report-card grade per subject (e.g. Mathematics: 75)."""
+    __tablename__ = "student_subject_grades"
+    __table_args__ = (
+        UniqueConstraint("user_id", "subject", name="uq_user_subject"),
+        Index("ix_subject_grade_user_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    subject = Column(String(100), nullable=False)   # e.g. "Mathematics"
+    grade = Column(Float, nullable=False)            # 0 – 100
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="subject_grades")
 
 
 class InteractionLog(Base):

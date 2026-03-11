@@ -26,14 +26,26 @@ type Phase = "form" | "submitting" | "result";
 export default function TestUploadModal({ open, onClose }: Props) {
   const [rows, setRows] = useState<Row[]>([newRow()]);
   const [competencies, setCompetencies] = useState<CompetencyOut[]>([]);
+  const [loadingCompetencies, setLoadingCompetencies] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [phase, setPhase] = useState<Phase>("form");
   const [result, setResult] = useState<TestUploadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  function fetchCompetencies() {
+    setLoadingCompetencies(true);
+    setLoadError(false);
+    materialsApi
+      .competencies()
+      .then(setCompetencies)
+      .catch(() => setLoadError(true))
+      .finally(() => setLoadingCompetencies(false));
+  }
+
   // Fetch competency list once when modal opens
   useEffect(() => {
     if (!open) return;
-    materialsApi.competencies().then(setCompetencies).catch(() => {});
+    fetchCompetencies();
   }, [open]);
 
   // Reset when closed
@@ -43,6 +55,7 @@ export default function TestUploadModal({ open, onClose }: Props) {
       setPhase("form");
       setResult(null);
       setError(null);
+      setLoadError(false);
     }
   }, [open]);
 
@@ -90,9 +103,10 @@ export default function TestUploadModal({ open, onClose }: Props) {
     }
   }
 
-  // Group competencies by grade for the datalist
+  // Group competencies by "Subject — Grade" for clear optgroup labels
   const gradeGroups = competencies.reduce<Record<string, CompetencyOut[]>>((acc, c) => {
-    (acc[c.grade_level] ??= []).push(c);
+    const key = c.subject ? `${c.subject} — ${c.grade_level}` : c.grade_level;
+    (acc[key] ??= []).push(c);
     return acc;
   }, {});
 
@@ -211,11 +225,14 @@ export default function TestUploadModal({ open, onClose }: Props) {
                               title="Competency"
                               value={row.competency_name}
                               onChange={(e) => updateRow(row.id, "competency_name", e.target.value)}
-                              className="input-premium appearance-none pr-8 text-sm w-full"
+                              disabled={loadingCompetencies || loadError}
+                              className="input-premium appearance-none pr-8 text-sm w-full disabled:opacity-50"
                             >
-                              <option value="">Select competency…</option>
-                              {Object.entries(gradeGroups).map(([grade, comps]) => (
-                                <optgroup key={grade} label={`Grade ${grade}`}>
+                              <option value="">
+                                {loadingCompetencies ? "Loading…" : loadError ? "Failed to load — retry below" : "Select competency…"}
+                              </option>
+                              {Object.entries(gradeGroups).map(([group, comps]) => (
+                                <optgroup key={group} label={group}>
                                   {comps.map((c) => (
                                     <option key={c.competency_id} value={c.competency_name}>
                                       {c.competency_name}
@@ -251,6 +268,17 @@ export default function TestUploadModal({ open, onClose }: Props) {
                         </motion.div>
                       ))}
                     </div>
+
+                    {/* Load error retry */}
+                    {loadError && (
+                      <p className="text-xs text-red-400 flex items-center gap-2">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        Couldn&apos;t load competencies.{" "}
+                        <button type="button" onClick={fetchCompetencies} className="underline hover:text-red-300">
+                          Retry
+                        </button>
+                      </p>
+                    )}
 
                     {/* Add row */}
                     <button

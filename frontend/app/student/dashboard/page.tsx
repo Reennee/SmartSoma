@@ -3,15 +3,17 @@
 import { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, BookOpen, Brain, Clock, Sparkles } from "lucide-react";
+import { TrendingUp, BookOpen, Brain, Clock, Sparkles, ChevronDown } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import RecommendationCard from "@/components/RecommendationCard";
 import MasteryRadar from "@/components/MasteryRadar";
+import SubjectGradeModal from "@/components/SubjectGradeModal";
 import {
   recommendApi,
   studentApi,
   type RecommendedMaterial,
   type StudentProgressOut,
+  type SubjectGradeOut,
 } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 
@@ -151,6 +153,9 @@ export default function StudentDashboard() {
   const [recommendations, setRecommendations] = useState<RecommendedMaterial[]>([]);
   const [progress, setProgress] = useState<StudentProgressOut | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gradeModalOpen, setGradeModalOpen] = useState(false);
+  const [subjectGrades, setSubjectGrades] = useState<SubjectGradeOut[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
 
   const user = useSyncExternalStore(
     (cb) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); },
@@ -163,10 +168,17 @@ export default function StudentDashboard() {
     if (user?.role === "teacher") { router.push("/teacher/dashboard"); return; }
   }, [router, user]);
 
-  const load = useCallback(async () => {
+  const loadGrades = useCallback(async () => {
+    try {
+      const grades = await studentApi.getSubjectGrades();
+      setSubjectGrades(grades);
+    } catch { /* no grades yet */ }
+  }, []);
+
+  const load = useCallback(async (subject?: string) => {
     try {
       const [recs, prog] = await Promise.all([
-        recommendApi.get(6),
+        recommendApi.get(6, subject || undefined),
         studentApi.myProgress(),
       ]);
       setRecommendations(recs);
@@ -178,7 +190,7 @@ export default function StudentDashboard() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadGrades(); }, [load, loadGrades]);
 
   const overallPct = progress ? Math.round(progress.overall_mastery * 100) : 0;
   const firstName = user?.full_name?.split(" ")[0] ?? "Student";
@@ -192,6 +204,12 @@ export default function StudentDashboard() {
       <div className="blob blob-purple w-[440px] h-[440px] top-[280px] right-[-100px] opacity-28" />
       <div className="blob blob-cyan   w-[320px] h-[320px] bottom-[60px] left-[30%] opacity-22" />
       <div className="dot-grid absolute inset-0 pointer-events-none" />
+
+      <SubjectGradeModal
+        open={gradeModalOpen}
+        onClose={() => setGradeModalOpen(false)}
+        onSuccess={() => { loadGrades(); load(selectedSubject || undefined); }}
+      />
 
       <div className="page-wrap">
         <Navbar />
@@ -219,7 +237,40 @@ export default function StudentDashboard() {
                 </p>
               )}
             </div>
-            
+
+            {/* ── Actions: subject filter + grade upload ── */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Subject filter dropdown */}
+              {subjectGrades.length > 0 && (
+                <div className="relative">
+                  <select
+                    title="Filter by subject"
+                    value={selectedSubject}
+                    onChange={(e) => {
+                      setSelectedSubject(e.target.value);
+                      load(e.target.value || undefined);
+                    }}
+                    className="input-premium text-sm pr-8 appearance-none"
+                  >
+                    <option value="">All subjects</option>
+                    {subjectGrades.map((g) => (
+                      <option key={g.subject} value={g.subject}>{g.subject}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
+                </div>
+              )}
+
+              {/* Upload grades button */}
+              <button
+                type="button"
+                onClick={() => setGradeModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium glass-sm border border-white/10 hover:border-purple-500/40 hover:text-purple-300 text-white/60 transition-all"
+              >
+                <BookOpen className="w-4 h-4" />
+                {subjectGrades.length > 0 ? "Update Grades" : "Upload Report Card"}
+              </button>
+            </div>
           </motion.div>
 
           {/* ── Stats row ── */}
