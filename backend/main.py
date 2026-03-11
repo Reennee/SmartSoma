@@ -32,6 +32,21 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("✅ Database tables ready")
 
+    # Apply any missing column migrations (safe — uses IF NOT EXISTS)
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE materials ADD COLUMN IF NOT EXISTS description TEXT"
+            ))
+            conn.execute(text(
+                "ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_url VARCHAR(500)"
+            ))
+            conn.commit()
+        logger.info("✅ DB schema up to date")
+    except Exception as exc:
+        logger.warning(f"⚠️  Schema migration skipped: {exc}")
+
     # Seed the database (idempotent — skips existing records)
     try:
         from backend.seed import run as seed_run
@@ -68,7 +83,8 @@ def create_app() -> FastAPI:
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     raw_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000")
-    origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+    # Strip whitespace AND trailing slashes — browsers send origins without trailing slash
+    origins = [o.strip().rstrip("/") for o in raw_origins.split(",") if o.strip()]
     logger.info(f"✅ CORS origins: {origins}")
 
     app.add_middleware(
