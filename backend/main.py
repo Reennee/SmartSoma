@@ -7,9 +7,11 @@ loads the BiLSTM DKT model, and wires up the health-check endpoint.
 import os
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -82,6 +84,11 @@ def create_app() -> FastAPI:
     app.include_router(materials.router)
     app.include_router(recommendations.router)
     app.include_router(analytics.router)
+
+    # ── Static files (downloaded REB PDFs) ────────────────────────────────────
+    static_dir = Path(__file__).parent / "static" / "materials"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static/materials", StaticFiles(directory=str(static_dir)), name="static_materials")
 
     # ── Health Check ──────────────────────────────────────────────────────────
     @app.get("/", response_model=HealthCheck, tags=["system"])

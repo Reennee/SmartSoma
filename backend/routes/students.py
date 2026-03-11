@@ -1,7 +1,10 @@
 """
 Student Routes
-GET /api/students/me/progress   — authenticated student's full progress dashboard
-GET /api/students/{id}/progress — teacher can view any student's progress
+GET  /api/students/me/progress        — authenticated student's full progress dashboard
+POST /api/students/me/upload-results  — upload competency-level test scores
+POST /api/students/me/subject-grades  — upload report-card subject grades
+GET  /api/students/me/subject-grades  — fetch stored subject grades
+GET  /api/students/{id}/progress      — teacher can view any student's progress
 """
 
 from datetime import datetime
@@ -12,8 +15,12 @@ from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user, require_teacher
 from backend.database import get_db
-from backend.models import CBCCompetency, InteractionLog, Material, StudentMasteryLog, User
-from backend.schemas import MasteryEntry, RecentInteraction, StudentProgressOut, TestUploadRequest, TestUploadResponse
+from backend.models import CBCCompetency, InteractionLog, Material, StudentMasteryLog, StudentSubjectGrade, User
+from backend.schemas import (
+    MasteryEntry, RecentInteraction, StudentProgressOut,
+    TestUploadRequest, TestUploadResponse,
+    SubjectGradeUploadRequest, SubjectGradeUploadResponse, SubjectGradeOut,
+)
 
 router = APIRouter(prefix="/api/students", tags=["students"])
 
@@ -158,6 +165,101 @@ def upload_test_results(
         new_overall_mastery=new_overall,
         updated_competencies=updated_entries,
     )
+
+
+@router.post("/me/subject-grades", response_model=SubjectGradeUploadResponse)
+def upload_subject_grades(
+    payload: SubjectGradeUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Student uploads report-card grades by subject (e.g. Mathematics: 75).
+    Two things happen:
+    1. Grades are stored in student_subject_grades (upsert per subject).
+    2. All competencies belonging to that subject have their mastery updated
+       using a weighted blend: 50% old mastery + 50% new grade, so that
+       the recommendation engine immediately reflects the subject performance.
+    """
+    for entry in payload.grades:
+        subject_norm = entry.subject.strip()
+        grade_fraction = entry.grade / 100.0
+
+        # Upsert subject grade row
+        existing = (
+            db.query(StudentSubjectGrade)
+            .filter(
+                StudentSubjectGrade.user_id == current_user.user_id,
+                func.lower(StudentSubjectGrade.subject) == subject_norm.lower(),
+            )
+            .first()
+        )
+        if existing:
+            existing.grade = entry.grade
+            existing.last_updated = datetime.utcnow()
+        else:
+            db.add(StudentSubjectGrade(
+                user_id=current_user.user_id,
+                subject=subject_norm,
+                grade=entry.grade,
+            ))
+
+        # Propagate to competency mastery: find competencies via materials of this subject
+        competency_ids = (
+            db.query(Material.competency_id)
+            .filter(func.lower(Material.subject) == subject_norm.lower())
+            .distinct()
+            .all()
+        )
+        for (comp_id,) in competency_ids:
+            mastery_row = (
+                db.query(StudentMasteryLog)
+                .filter(
+                    StudentMasteryLog.user_id == current_user.user_id,
+                    StudentMasteryLog.competency_id == comp_id,
+                )
+                .first()
+            )
+            if mastery_row:
+                mastery_row.mastery_score = round(mastery_row.mastery_score * 0.5 + grade_fraction * 0.5, 4)
+                mastery_row.last_updated = datetime.utcnow()
+            else:
+                db.add(StudentMasteryLog(
+                    user_id=current_user.user_id,
+                    competency_id=comp_id,
+                    mastery_score=round(grade_fraction * 0.5, 4),
+                ))
+
+    db.commit()
+
+    saved_grades = (
+        db.query(StudentSubjectGrade)
+        .filter(StudentSubjectGrade.user_id == current_user.user_id)
+        .order_by(StudentSubjectGrade.subject)
+        .all()
+    )
+    return SubjectGradeUploadResponse(
+        saved=len(payload.grades),
+        subject_grades=[
+            SubjectGradeOut(subject=g.subject, grade=g.grade, last_updated=g.last_updated)
+            for g in saved_grades
+        ],
+    )
+
+
+@router.get("/me/subject-grades", response_model=list[SubjectGradeOut])
+def get_subject_grades(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all stored subject grades for the authenticated student."""
+    grades = (
+        db.query(StudentSubjectGrade)
+        .filter(StudentSubjectGrade.user_id == current_user.user_id)
+        .order_by(StudentSubjectGrade.subject)
+        .all()
+    )
+    return [SubjectGradeOut(subject=g.subject, grade=g.grade, last_updated=g.last_updated) for g in grades]
 
 
 @router.get("/{student_id}/progress", response_model=StudentProgressOut)

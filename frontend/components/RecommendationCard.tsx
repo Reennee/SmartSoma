@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Clock, Loader2, Sparkles, Layers } from "lucide-react";
+import { BookOpen, Clock, ExternalLink, Loader2, Sparkles, Layers } from "lucide-react";
 import { materialsApi, type RecommendedMaterial } from "@/lib/api";
 
 // ── Subject palette ────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ export default function RecommendationCard({ material, onStudied }: Props) {
       </div>
 
       {/* ── Title + competency ── */}
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <h3 className="text-base font-bold text-white leading-snug line-clamp-2">
           {material.title}
         </h3>
@@ -142,6 +142,11 @@ export default function RecommendationCard({ material, onStudied }: Props) {
           <Layers className="w-3 h-3 shrink-0 text-white/25" />
           {material.competency_name}
         </p>
+        {material.description && (
+          <p className="text-xs text-white/35 leading-relaxed line-clamp-2">
+            {material.description}
+          </p>
+        )}
       </div>
 
       {/* ── Mastery bar ── */}
@@ -180,36 +185,49 @@ export default function RecommendationCard({ material, onStudied }: Props) {
         <span>Grade {material.grade_level}</span>
       </div>
 
-      {/* ── CTA button ── */}
-      <button
-        type="button"
-        onClick={markAsStudied}
-        disabled={loading || done}
-        className={[
-          "btn-grad w-full flex items-center justify-center gap-2 text-sm font-semibold transition-all duration-300",
-          done
-            ? "bg-none bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shadow-none hover:transform-none cursor-default"
-            : "",
-          loading ? "opacity-70 cursor-wait" : "",
-        ].join(" ")}
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Logging study session…
-          </>
-        ) : done ? (
-          <>
-            <BookOpen className="w-4 h-4" />
-            Marked as studied
-          </>
-        ) : (
-          <>
-            <BookOpen className="w-4 h-4" />
-            Mark as Studied
-          </>
+      {/* ── CTA buttons ── */}
+      <div className="flex gap-2">
+        {material.file_url && (
+          <a
+            href={material.file_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white glass-sm border border-white/10 hover:border-white/25 transition-all"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Open PDF
+          </a>
         )}
-      </button>
+        <button
+          type="button"
+          onClick={markAsStudied}
+          disabled={loading || done}
+          className={[
+            "flex-1 btn-grad flex items-center justify-center gap-2 text-sm font-semibold transition-all duration-300",
+            done
+              ? "bg-none bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shadow-none hover:transform-none cursor-default"
+              : "",
+            loading ? "opacity-70 cursor-wait" : "",
+          ].join(" ")}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Logging…
+            </>
+          ) : done ? (
+            <>
+              <BookOpen className="w-4 h-4" />
+              Studied
+            </>
+          ) : (
+            <>
+              <BookOpen className="w-4 h-4" />
+              Mark Studied
+            </>
+          )}
+        </button>
+      </div>
     </motion.div>
   );
 }

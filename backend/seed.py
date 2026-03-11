@@ -88,7 +88,9 @@ def seed_materials(db, competency_map: dict) -> dict:
             mat = Material(
                 material_id=csv_id,
                 title=row["title"].strip(),
+                description=row.get("description", "").strip() or None,
                 file_path=row.get("file_path", "").strip() or None,
+                file_url=row.get("file_url", "").strip() or None,
                 subject=row["subject"].strip(),
                 competency_id=comp.competency_id,
                 difficulty_level=row["difficulty"].strip(),

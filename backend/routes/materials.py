@@ -1,7 +1,10 @@
 """
 Materials Routes
 GET  /api/materials                     — list/filter materials
+GET  /api/materials/competencies        — list all CBC competencies
 GET  /api/materials/{id}                — material detail
+POST /api/materials/preview             — AI-extract metadata from a URL (teacher)
+POST /api/materials                     — create a new material (teacher)
 POST /api/materials/{id}/interact       — log an interaction + update mastery
 """
 
@@ -18,7 +21,11 @@ from backend.models import (
     CBCCompetency, InteractionLog, Material,
     StudentMasteryLog, User,
 )
-from backend.schemas import CompetencyOut, MarkViewedRequest, MaterialDetail, MaterialOut, PagedMaterials
+from backend.schemas import (
+    CompetencyOut, MarkViewedRequest, MaterialCreate,
+    MaterialDetail, MaterialOut, MaterialPreviewRequest,
+    MaterialPreviewResponse, PagedMaterials,
+)
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
@@ -35,9 +42,20 @@ def list_competencies(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Return all CBC competencies (used by the test-upload form)."""
+    """Return all CBC competencies with their subject (derived from materials)."""
     rows = db.query(CBCCompetency).order_by(CBCCompetency.grade_level, CBCCompetency.competency_name).all()
-    return [{"competency_id": r.competency_id, "competency_name": r.competency_name, "grade_level": r.grade_level} for r in rows]
+    result = []
+    for r in rows:
+        # Derive subject from the first linked material
+        first_mat = db.query(Material).filter(Material.competency_id == r.competency_id).first()
+        result.append({
+            "competency_id": r.competency_id,
+            "competency_name": r.competency_name,
+            "grade_level": r.grade_level,
+            "description": r.description,
+            "subject": first_mat.subject if first_mat else None,
+        })
+    return result
 
 
 @router.get("", response_model=PagedMaterials)
@@ -65,6 +83,65 @@ def list_materials(
     total = q.count()
     materials = q.offset(skip).limit(limit).all()
     return {"items": [_enrich(m) for m in materials], "total": total, "skip": skip, "limit": limit}
+
+
+@router.post("/preview", response_model=MaterialPreviewResponse)
+def preview_material(
+    payload: MaterialPreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch a URL and use Claude AI to extract learning material metadata.
+    Teacher-only. Does NOT write to the database.
+    """
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can use this endpoint")
+
+    from backend.services.extractor import fetch_url_content, extract_metadata
+
+    competencies = [
+        row.competency_name
+        for row in db.query(CBCCompetency.competency_name).order_by(CBCCompetency.competency_name).all()
+    ]
+
+    raw = fetch_url_content(payload.url)
+    result = extract_metadata(payload.url, raw, competencies)
+    return result
+
+
+@router.post("", response_model=MaterialOut, status_code=201)
+def create_material(
+    payload: MaterialCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Create a new learning material. Teacher-only.
+    """
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can create materials")
+
+    competency = db.query(CBCCompetency).filter(
+        CBCCompetency.competency_id == payload.competency_id
+    ).first()
+    if not competency:
+        raise HTTPException(status_code=400, detail="competency_id not found")
+
+    material = Material(
+        title=payload.title,
+        description=payload.description,
+        file_url=payload.file_url,
+        subject=payload.subject,
+        competency_id=payload.competency_id,
+        difficulty_level=payload.difficulty_level,
+        content_type=payload.content_type,
+        duration_minutes=payload.duration_minutes,
+    )
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return _enrich(material)
 
 
 @router.get("/{material_id}", response_model=MaterialDetail)

@@ -65,6 +65,7 @@ class CompetencyOut(BaseModel):
     competency_name: str
     description: Optional[str]
     grade_level: str
+    subject: Optional[str] = None   # derived from associated materials
 
     model_config = {"from_attributes": True}
 
@@ -74,12 +75,14 @@ class CompetencyOut(BaseModel):
 class MaterialOut(BaseModel):
     material_id: int
     title: str
+    description: Optional[str] = None
     subject: str
     competency_id: int
     competency_name: Optional[str] = None   # populated from join
     difficulty_level: str
     content_type: Optional[str]
     duration_minutes: Optional[int]
+    file_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -105,12 +108,14 @@ class RecommendationRequest(BaseModel):
 class RecommendedMaterial(BaseModel):
     material_id: int
     title: str
+    description: Optional[str] = None
     subject: str
     competency_name: str
     grade_level: str
     difficulty_level: str
     content_type: Optional[str]
     duration_minutes: Optional[int]
+    file_url: Optional[str] = None
     confidence_score: float
     current_mastery: float
 
@@ -198,6 +203,68 @@ class TestUploadResponse(BaseModel):
     skipped: int           # competency names not found in DB
     new_overall_mastery: float
     updated_competencies: List[MasteryEntry]
+
+
+# ─── Subject Grade Upload ────────────────────────────────────────────────────
+
+class SubjectGradeEntry(BaseModel):
+    """A student's report-card grade for one subject (0–100)."""
+    subject: str
+    grade: float  # 0–100
+
+    @field_validator("grade")
+    @classmethod
+    def grade_must_be_valid(cls, v: float) -> float:
+        if not 0 <= v <= 100:
+            raise ValueError("grade must be between 0 and 100")
+        return v
+
+
+class SubjectGradeUploadRequest(BaseModel):
+    grades: List[SubjectGradeEntry]
+
+
+class SubjectGradeOut(BaseModel):
+    subject: str
+    grade: float
+    last_updated: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SubjectGradeUploadResponse(BaseModel):
+    saved: int
+    subject_grades: List[SubjectGradeOut]
+
+
+# ─── Material Create / Preview (Teacher) ─────────────────────────────────────
+
+class MaterialCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    file_url: Optional[str] = None
+    subject: str
+    competency_id: int
+    difficulty_level: str
+    content_type: Optional[str] = None
+    duration_minutes: Optional[int] = None
+
+
+class MaterialPreviewRequest(BaseModel):
+    url: str
+
+
+class MaterialPreviewResponse(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    subject: Optional[str] = None
+    competency_name: Optional[str] = None   # Claude picks from valid list
+    grade_level: Optional[str] = None
+    difficulty_level: Optional[str] = None
+    content_type: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    file_url: str
+    link_type: str   # "youtube" | "pdf" | "webpage"
 
 
 # ─── System ──────────────────────────────────────────────────────────────────

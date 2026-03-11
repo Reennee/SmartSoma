@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.models import (
     CBCCompetency, InteractionLog, Material,
-    StudentMasteryLog, User,
+    StudentMasteryLog, StudentSubjectGrade, User,
 )
 from backend.schemas import RecommendedMaterial
 from backend.services.dkt import DKTService
@@ -37,6 +37,14 @@ class HybridRecommender:
             .all()
         )
         mastery_map = {r.competency_id: r.mastery_score for r in mastery_rows}
+
+        # 1b ── Gather subject grades: subject (lowercased) → grade fraction (0–1)
+        subject_grade_rows = (
+            db.query(StudentSubjectGrade)
+            .filter(StudentSubjectGrade.user_id == user.user_id)
+            .all()
+        )
+        subject_grade_map = {r.subject.lower(): r.grade / 100.0 for r in subject_grade_rows}
 
         # 2 ── Get student's recent interaction history for DKT
         recent_interactions = (
@@ -83,12 +91,18 @@ class HybridRecommender:
             difficulty_bonus = difficulty_weights.get(mat.difficulty_level, 0.5)
             novelty = 0.5 if mat.material_id in seen_ids else 1.0
 
+            # Subject grade boost: low report-card grade → recommend more of that subject
+            # boost ranges 0.0 (grade=100%) to 0.20 (grade=0%)
+            subject_grade = subject_grade_map.get(mat.subject.lower())
+            subject_boost = (1.0 - subject_grade) * 0.20 if subject_grade is not None else 0.0
+
             # Weighted composite score
             raw_score = (
-                mastery_gap * 0.50
-                + difficulty_bonus * 0.25
+                mastery_gap * 0.45
+                + difficulty_bonus * 0.20
                 + novelty * 0.15
-                + dkt_confidence * 0.10  # DKT nudges toward materials likely to raise mastery
+                + dkt_confidence * 0.10
+                + subject_boost * 0.10   # subject grade weighting (up to +0.20 for weak subjects)
             )
             confidence_score = round(min(raw_score, 1.0), 4)
 
@@ -96,12 +110,14 @@ class HybridRecommender:
                 RecommendedMaterial(
                     material_id=mat.material_id,
                     title=mat.title,
+                    description=mat.description,
                     subject=mat.subject,
                     competency_name=mat.competency.competency_name,
                     grade_level=mat.competency.grade_level,
                     difficulty_level=mat.difficulty_level,
                     content_type=mat.content_type,
                     duration_minutes=mat.duration_minutes,
+                    file_url=mat.file_url,
                     confidence_score=confidence_score,
                     current_mastery=round(comp_mastery, 3),
                 )

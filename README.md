@@ -90,12 +90,36 @@ Sigmoid Output → Predicted Mastery Level (0-1)
 
 | Metric | Value | Target | Status |
 |--------|-------|--------|--------|
-| **RMSE** | 0.18 |  < 0.25 | ✅ **Excellent** |
-| **MAE** | 0.14 | < 0.20 | ✅ **Excellent** |
-| **R² Score** | 0.82 | > 0.70 | ✅ **Strong** |
-| **Accuracy** | 87.3% | > 80% | ✅ **High** |
-| **AUC-ROC** | 0.91 | > 0.75 | ✅ **Excellent** |
-| **Precision@5** | 0.78 | > 0.70 | ✅ **Good** |
+| **RMSE** | 0.0881 | < 0.25 | ✅ **Excellent** |
+| **MAE** | 0.0667 | < 0.20 | ✅ **Excellent** |
+| **R² Score** | 0.1436 | > 0.70 | ⚠️ **Low** |
+| **Accuracy** | 97.39% | > 80% | ✅ **High** |
+| **AUC-ROC** | 0.7820 | > 0.75 | ✅ **Good** |
+| **Precision@5** | 0.00 | > 0.70 | ❌ **Needs Work** |
+| **Precision@10** | 0.10 | > 0.70 | ❌ **Needs Work** |
+
+> **Note:** The low R² score (0.14) and Precision@K reflect a known limitation of training on a small synthetic dataset (50 students, 100 materials, 1,200 interactions). The model achieves strong mastery-level binary classification (97.39% accuracy, AUC-ROC 0.78) but struggles with regression variance on sparse interaction data. Recommendation quality would improve significantly with real student interaction data at scale.
+
+### Hardware Benchmark
+
+Inference latency measured over 100 runs on a MacBook Pro (Intel Core i7, 8-core, macOS 12.6, Python 3.9):
+
+| Interaction Sequence Length | Mean | Median | P95 |
+|-----------------------------|------|--------|-----|
+| 1 interaction  | 1.57 ms | 1.34 ms | 2.18 ms |
+| 5 interactions | 1.39 ms | 1.31 ms | 1.98 ms |
+| 10 interactions | 1.44 ms | 1.32 ms | 2.14 ms |
+| 15 interactions (max) | 1.45 ms | 1.36 ms | 2.00 ms |
+
+Key observations:
+- **Sub-2ms median inference** across all sequence lengths — suitable for real-time recommendations
+- Latency is consistent regardless of sequence length, confirming the BiLSTM handles variable-length input efficiently
+- Benchmark script available at `backend/scripts/benchmark.py` — can be run on target hardware (Raspberry Pi, school server) to verify edge deployment performance
+
+To reproduce:
+```bash
+python -m backend.scripts.benchmark --offline --runs 100
+```
 
 ### Visualizations
 

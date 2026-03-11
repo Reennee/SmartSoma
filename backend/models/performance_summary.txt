@@ -4,11 +4,12 @@ Performance Metrics Summary
 ============================================================
 
 Dataset:
-  - Total Interactions: 1200
-  - Training Samples: 920
-  - Test Samples: 230
-  - Students: 50
-  - Materials: 100
+  - Total Interactions: 5000
+  - Train Students: 120  |  Test Students: 30
+  - Training Sequences: 3930
+  - Test Sequences: 920
+  - Students: 150
+  - Materials: 60
 
 Model Architecture:
   - Type: Bidirectional LSTM (BiLSTM)
@@ -17,21 +18,25 @@ Model Architecture:
   - Total Parameters: 548,993
 
 Training Configuration:
-  - Epochs: 30
+  - Epochs (actual / max): 44 / 60
   - Batch Size: 32
-  - Optimizer: Adam (lr=0.001)
+  - Optimizer: Adam (lr=0.001, weight_decay=1e-4)
+  - LR Scheduler: ReduceLROnPlateau (factor=0.5, patience=5)
+  - Early Stopping: patience=8 (best-weight restore)
+  - Gradient Clipping: max_norm=1.0
   - Loss Function: MSE
 
 Performance Metrics:
-  - RMSE: 0.0881
-  - MAE: 0.0667
-  - R² Score: 0.1436
-  - Accuracy (Binary): 97.39%
-  - AUC-ROC: 0.7820
+  - RMSE: 0.0611
+  - MAE: 0.0462
+  - R² Score: 0.3602
+  - Accuracy (Binary): 99.57%
+  - AUC-ROC: 0.7238
 
 Recommendation Quality:
-  - Precision@5: 0.0000
-  - Precision@10: 0.1000
+  - Precision@5  (per-student avg): 0.0000
+  - Precision@10 (per-student avg): 0.0033
+  - NDCG@10: 0.6561
 
 ============================================================
 Model ready for deployment on Edge devices!

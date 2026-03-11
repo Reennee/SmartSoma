@@ -1,211 +1,164 @@
 """
 Synthetic Student Data Generator for SmartSoma
-Generates realistic student interaction data for S1-S3 Math and Physics
-aligned with the Rwandan Competence-Based Curriculum (CBC)
+Generates realistic student interaction data aligned with the real REB CBC materials.
+Does NOT overwrite materials.csv — reads from it to stay in sync.
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import json
 import random
+from pathlib import Path
 
-# Set random seed for reproducibility
+# ── Reproducibility ────────────────────────────────────────────────────────────
 np.random.seed(42)
 random.seed(42)
 
-# Rwanda CBC Competencies for S1-S3 Math and Physics
-MATH_COMPETENCIES = [
-    "Numbers and Operations",
-    "Algebra and Equations",
-    "Geometry and Measurement",
-    "Statistics and Probability",
-    "Ratios and Proportions",
-    "Functions and Graphs"
-]
+# ── Paths ──────────────────────────────────────────────────────────────────────
+SCRIPT_DIR = Path(__file__).parent
+DATA_DIR = SCRIPT_DIR.parent / "data"
 
-PHYSICS_COMPETENCIES = [
-    "Mechanics and Motion",
-    "Forces and Energy",
-    "Electricity and Magnetism",
-    "Light and Sound",
-    "Matter and Heat",
-    "Scientific Investigation"
-]
-
-DIFFICULTY_LEVELS = ["Beginner", "Intermediate", "Advanced"]
+DIFFICULTY_WEIGHTS = {"Beginner": 1.0, "Intermediate": 0.85, "Advanced": 0.70}
 GRADE_LEVELS = ["S1", "S2", "S3"]
 
-def generate_learning_materials(num_materials=100):
-    """Generate synthetic learning materials for Math and Physics"""
-    materials = []
-    
-    for i in range(num_materials):
-        subject = random.choice(["Mathematics", "Physics"])
-        competencies = MATH_COMPETENCIES if subject == "Mathematics" else PHYSICS_COMPETENCIES
-        
-        material = {
-            "material_id": i + 1,
-            "title": f"{subject} - {random.choice(competencies)} - Lesson {random.randint(1, 20)}",
-            "subject": subject,
-            "competency": random.choice(competencies),
-            "grade_level": random.choice(GRADE_LEVELS),
-            "difficulty": random.choice(DIFFICULTY_LEVELS),
-            "content_type": random.choice(["PDF", "Video", "Interactive Exercise"]),
-            "duration_minutes": random.randint(10, 60),
-            "file_path": f"/materials/{subject.lower()}/lesson_{i+1}.pdf"
-        }
-        materials.append(material)
-    
-    return pd.DataFrame(materials)
 
-def generate_students(num_students=50):
-    """Generate synthetic student profiles"""
-    students = []
+def load_materials() -> pd.DataFrame:
+    """Load the real REB CBC materials CSV (materials 1–60)."""
+    path = DATA_DIR / "materials.csv"
+    df = pd.read_csv(path)
+    # Keep only the columns the generator needs
+    return df[["material_id", "subject", "competency", "grade_level", "difficulty", "duration_minutes"]].copy()
+
+
+def generate_students(num_students: int = 150) -> pd.DataFrame:
+    """Generate synthetic student profiles."""
     rwandan_names = [
         "Uwera", "Mugisha", "Mutoni", "Niyonzima", "Uwamahoro",
-        "Habimana", "Nkurunziza", "Iradukunda", "Nsabimana", "Mukantwari"
+        "Habimana", "Nkurunziza", "Iradukunda", "Nsabimana", "Mukantwari",
+        "Kayitesi", "Bizimana", "Ndayisaba", "Uwimana", "Rukundo",
+        "Gasana", "Munyaneza", "Kabera", "Ingabire", "Nzeyimana",
     ]
-    
+
+    students = []
     for i in range(num_students):
-        student = {
+        students.append({
             "student_id": i + 1,
             "name": f"{random.choice(rwandan_names)} {random.choice(rwandan_names)}",
             "grade_level": random.choice(GRADE_LEVELS),
-            "baseline_ability": np.random.beta(5, 2),  # Skewed toward higher ability
-            "learning_rate": np.random.uniform(0.02, 0.08),  # How fast they improve
-            "consistency": np.random.uniform(0.6, 0.95)  # How consistent their performance is
-        }
-        students.append(student)
-    
+            # Skew slightly toward higher baseline (Rwandan school context)
+            "baseline_ability": float(np.random.beta(5, 2)),
+            "learning_rate": float(np.random.uniform(0.02, 0.08)),
+            "consistency": float(np.random.uniform(0.60, 0.95)),
+        })
     return pd.DataFrame(students)
 
-def simulate_mastery_progression(student, material, previous_mastery):
-    """
-    Simulate realistic mastery progression using learning curve model
-    
-    Factors:
-    - Student baseline ability
-    - Material difficulty
-    - Previous mastery level
-    - Learning rate
-    - Random noise for realism
-    """
-    difficulty_multiplier = {
-        "Beginner": 1.0,
-        "Intermediate": 0.85,
-        "Advanced": 0.7
-    }
-    
-    # Calculate expected mastery gain
-    difficulty_factor = difficulty_multiplier[material["difficulty"]]
-    learning_gain = student["learning_rate"] * difficulty_factor
-    
-    # Natural learning curve: harder to improve at higher mastery
-    diminishing_returns = 1 - (previous_mastery * 0.5)
-    
-    # Calculate new mastery with noise
-    mastery_increase = learning_gain * diminishing_returns
-    noise = np.random.normal(0, 0.05) * student["consistency"]
-    
-    new_mastery = min(1.0, max(0.0, previous_mastery + mastery_increase + noise))
-    
-    return new_mastery
 
-def generate_interactions(students_df, materials_df, num_interactions=1000):
-    """Generate realistic student-material interaction sequences"""
+def simulate_mastery_progression(
+    baseline_ability: float,
+    learning_rate: float,
+    consistency: float,
+    difficulty: str,
+    previous_mastery: float,
+) -> float:
+    diff_factor = DIFFICULTY_WEIGHTS.get(difficulty, 0.85)
+    gain = learning_rate * diff_factor * (1 - previous_mastery * 0.5)
+    noise = float(np.random.normal(0, 0.05)) * consistency
+    return float(min(1.0, max(0.0, previous_mastery + gain + noise)))
+
+
+def generate_interactions(
+    students_df: pd.DataFrame,
+    materials_df: pd.DataFrame,
+    num_interactions: int = 5000,
+) -> pd.DataFrame:
+    """Generate realistic student–material interaction sequences."""
     interactions = []
-    
-    # Track each student's mastery by competency
-    student_competency_mastery = {}
-    
-    start_date = datetime(2025, 9, 1)  # Start of academic year
-    
-    for _ in range(num_interactions):
-        # Select random student and material
+    mastery_state: dict[tuple, float] = {}  # (student_id, competency) → mastery
+
+    start_date = datetime(2025, 9, 1)
+
+    for idx in range(num_interactions):
         student = students_df.sample(1).iloc[0]
         material = materials_df.sample(1).iloc[0]
-        
-        # Initialize mastery tracking
-        key = (student["student_id"], material["competency"])
-        if key not in student_competency_mastery:
-            student_competency_mastery[key] = student["baseline_ability"] * 0.3
-        
-        previous_mastery = student_competency_mastery[key]
-        
-        # Simulate interaction
+
+        key = (int(student["student_id"]), str(material["competency"]))
+        if key not in mastery_state:
+            mastery_state[key] = float(student["baseline_ability"]) * 0.3
+
+        prev_mastery = mastery_state[key]
         new_mastery = simulate_mastery_progression(
-            student.to_dict(), 
-            material.to_dict(), 
-            previous_mastery
+            baseline_ability=float(student["baseline_ability"]),
+            learning_rate=float(student["learning_rate"]),
+            consistency=float(student["consistency"]),
+            difficulty=str(material["difficulty"]),
+            previous_mastery=prev_mastery,
         )
-        
-        # Update tracking
-        student_competency_mastery[key] = new_mastery
-        
-        # Calculate interaction metrics
-        time_spent = int(material["duration_minutes"] * np.random.uniform(0.7, 1.3))
-        score = min(100, max(0, int(new_mastery * 100 + np.random.normal(0, 10))))
-        completed = random.random() < student["consistency"]
-        
-        interaction = {
-            "interaction_id": len(interactions) + 1,
+        mastery_state[key] = new_mastery
+
+        duration = int(material["duration_minutes"]) if pd.notna(material["duration_minutes"]) else 30
+        time_spent = int(duration * float(np.random.uniform(0.7, 1.3)))
+        score = int(min(100, max(0, new_mastery * 100 + float(np.random.normal(0, 10)))))
+        completed = random.random() < float(student["consistency"])
+
+        interactions.append({
+            "interaction_id": idx + 1,
             "student_id": int(student["student_id"]),
             "material_id": int(material["material_id"]),
-            "timestamp": start_date + timedelta(days=random.randint(0, 120)),
+            "timestamp": start_date + timedelta(days=random.randint(0, 180)),
             "duration_seconds": time_spent * 60,
             "score": score,
             "mastery_level": round(new_mastery, 3),
             "completed": completed,
-            "competency": material["competency"],
-            "subject": material["subject"]
-        }
-        interactions.append(interaction)
-    
-    # Sort by timestamp to create realistic sequences
-    interactions_df = pd.DataFrame(interactions)
-    interactions_df = interactions_df.sort_values(["student_id", "timestamp"])
-    
-    return interactions_df
+            "competency": str(material["competency"]),
+            "subject": str(material["subject"]),
+        })
+
+    df = pd.DataFrame(interactions)
+    df = df.sort_values(["student_id", "timestamp"]).reset_index(drop=True)
+    return df
+
 
 def main():
-    """Generate and save all synthetic datasets"""
-    print("🎓 SmartSoma Synthetic Data Generator")
-    print("=" * 50)
-    
-    # Generate datasets
-    print("\n📚 Generating learning materials...")
-    materials_df = generate_learning_materials(num_materials=100)
-    print(f"   ✓ Created {len(materials_df)} materials")
-    
-    print("\n👨‍🎓 Generating student profiles...")
-    students_df = generate_students(num_students=50)
+    print("🎓 SmartSoma Synthetic Data Generator (CBC-aligned)")
+    print("=" * 55)
+
+    print("\n📚 Loading real REB materials from materials.csv …")
+    materials_df = load_materials()
+    print(f"   ✓ Loaded {len(materials_df)} materials  "
+          f"(IDs {materials_df['material_id'].min()}–{materials_df['material_id'].max()})")
+    print(f"   ✓ Subjects: {dict(materials_df['subject'].value_counts())}")
+    print(f"   ✓ Unique competencies: {materials_df['competency'].nunique()}")
+
+    print("\n👨‍🎓 Generating student profiles …")
+    students_df = generate_students(num_students=150)
     print(f"   ✓ Created {len(students_df)} students")
-    
-    print("\n📊 Generating student interactions...")
-    interactions_df = generate_interactions(students_df, materials_df, num_interactions=1200)
+
+    print("\n📊 Generating student interactions …")
+    interactions_df = generate_interactions(students_df, materials_df, num_interactions=5000)
     print(f"   ✓ Created {len(interactions_df)} interactions")
-    
-    # Save to CSV
-    print("\n💾 Saving datasets...")
-    materials_df.to_csv("data/materials.csv", index=False)
-    students_df.to_csv("data/students.csv", index=False)
-    interactions_df.to_csv("data/interactions.csv", index=False)
-    
+
+    print("\n💾 Saving datasets …")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    students_df.to_csv(DATA_DIR / "students.csv", index=False)
+    interactions_df.to_csv(DATA_DIR / "interactions.csv", index=False)
+    print(f"   ✓ students.csv  → {DATA_DIR / 'students.csv'}")
+    print(f"   ✓ interactions.csv → {DATA_DIR / 'interactions.csv'}")
+    print("   ℹ  materials.csv was NOT overwritten (using real REB data)")
+
     print("\n✅ Data generation complete!")
     print("\nDataset Summary:")
-    print(f"   • Students: {len(students_df)}")
-    print(f"   • Materials: {len(materials_df)}")
+    print(f"   • Students:     {len(students_df)}")
+    print(f"   • Materials:    {len(materials_df)}  (real REB CBC units)")
     print(f"   • Interactions: {len(interactions_df)}")
-    print(f"   • Subjects: Mathematics, Physics")
-    print(f"   • Grade Levels: S1, S2, S3")
-    print(f"   • Competencies: {len(MATH_COMPETENCIES + PHYSICS_COMPETENCIES)}")
-    
-    # Display sample data
-    print("\n📋 Sample Interaction Data:")
-    print(interactions_df.head(3))
-    
+    print(f"   • Subjects:     Mathematics, Physics")
+    print(f"   • Grade levels: S1, S2, S3")
+    print(f"   • Competencies: {materials_df['competency'].nunique()}")
+
+    print("\n📋 Sample interactions:")
+    print(interactions_df.head(3).to_string(index=False))
+
     return students_df, materials_df, interactions_df
+
 
 if __name__ == "__main__":
     main()
