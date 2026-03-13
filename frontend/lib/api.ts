@@ -36,6 +36,7 @@ export interface RecommendedMaterial {
   content_type: string | null;
   duration_minutes: number | null;
   file_url: string | null;
+  file_path: string | null;  // local static path, e.g. /static/materials/math/s1/foo.pdf
   confidence_score: number;
   current_mastery: number;
 }

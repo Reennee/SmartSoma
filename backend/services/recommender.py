@@ -118,6 +118,7 @@ class HybridRecommender:
                     content_type=mat.content_type,
                     duration_minutes=mat.duration_minutes,
                     file_url=mat.file_url,
+                    file_path=mat.file_path,
                     confidence_score=confidence_score,
                     current_mastery=round(comp_mastery, 3),
                 )

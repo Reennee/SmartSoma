@@ -116,6 +116,7 @@ class RecommendedMaterial(BaseModel):
     content_type: Optional[str]
     duration_minutes: Optional[int]
     file_url: Optional[str] = None
+    file_path: Optional[str] = None   # local static path served by FastAPI
     confidence_score: float
     current_mastery: float
 

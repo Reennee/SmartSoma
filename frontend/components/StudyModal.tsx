@@ -1,12 +1,19 @@
 "use client";
 
 /**
- * StudyModal — opens a PDF / YouTube / webpage viewer in a full-screen overlay.
- * Tracks cumulative time spent per material in localStorage.
- * "Mark Complete" logs the interaction to the backend.
+ * StudyModal — full-screen PDF / YouTube / webpage study overlay.
+ *
+ * Key behaviours:
+ * - Uses ReactDOM.createPortal → renders at <body> so it's never clipped by a
+ *   parent element with a CSS transform (e.g. framer-motion whileHover cards).
+ * - Prefers the locally-downloaded file (file_path served by the backend) over
+ *   the external file_url, so PDFs load even without internet access.
+ * - Tracks cumulative time in localStorage per material; timer resumes on reopen.
+ * - "Mark Complete" calls the backend interact endpoint with real time spent.
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -30,25 +37,22 @@ function youtubeEmbedUrl(url: string): string | null {
   return m ? `https://www.youtube.com/embed/${m[1]}?autoplay=0&rel=0` : null;
 }
 
-function storageKey(material_id: number) {
-  return `smartsoma_study_${material_id}`;
+function storageKey(id: number) {
+  return `smartsoma_study_${id}`;
 }
 
-function loadSavedSeconds(material_id: number): number {
+function loadSavedSeconds(id: number): number {
   try {
-    const raw = localStorage.getItem(storageKey(material_id));
-    return raw ? Number(raw) : 0;
+    return Number(localStorage.getItem(storageKey(id)) ?? 0);
   } catch {
     return 0;
   }
 }
 
-function saveSeconds(material_id: number, seconds: number) {
+function saveSeconds(id: number, seconds: number) {
   try {
-    localStorage.setItem(storageKey(material_id), String(seconds));
-  } catch {
-    /* ignore */
-  }
+    localStorage.setItem(storageKey(id), String(seconds));
+  } catch { /* ignore */ }
 }
 
 function fmtTime(seconds: number) {
@@ -69,37 +73,43 @@ interface Props {
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function StudyModal({ material, open, onClose, onCompleted }: Props) {
-  const [elapsed, setElapsed] = useState(0);       // current session seconds
-  const [saved, setSaved] = useState(0);            // previously saved seconds
+  const [elapsed, setElapsed] = useState(0);
+  const [saved, setSaved]     = useState(0);
   const [completing, setCompleting] = useState(false);
-  const [completed, setCompleted] = useState(false);
+  const [completed, setCompleted]   = useState(false);
+  const [mounted, setMounted]       = useState(false);   // SSR guard for portal
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Determine viewer type
+  // Portal requires document — wait until client mount
+  useEffect(() => { setMounted(true); }, []);
+
+  // Resolve which URL to actually embed
+  const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+  const resolvedUrl: string | null =
+    material.file_path
+      ? `${BASE}${material.file_path}`   // local download takes priority
+      : material.file_url ?? null;
+
   const isYouTube =
-    material.file_url != null &&
-    (material.file_url.includes("youtube.com") || material.file_url.includes("youtu.be"));
+    resolvedUrl != null &&
+    (resolvedUrl.includes("youtube.com") || resolvedUrl.includes("youtu.be"));
+
   const isPDF =
     material.content_type === "PDF" ||
-    (material.file_url != null && material.file_url.toLowerCase().endsWith(".pdf"));
-  const embedUrl = isYouTube && material.file_url ? youtubeEmbedUrl(material.file_url) : null;
+    (resolvedUrl != null && resolvedUrl.toLowerCase().endsWith(".pdf"));
 
-  // Load saved time when opening
+  const ytEmbed = isYouTube && resolvedUrl ? youtubeEmbedUrl(resolvedUrl) : null;
+
+  // Timer: start on open, pause on close
   useEffect(() => {
     if (!open) return;
-    const prev = loadSavedSeconds(material.material_id);
-    setSaved(prev);
+    setSaved(loadSavedSeconds(material.material_id));
     setElapsed(0);
     setCompleted(false);
-
-    // Start timer
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [open, material.material_id]);
 
-  // Save progress and stop timer on close
   function handleClose() {
     if (timerRef.current) clearInterval(timerRef.current);
     saveSeconds(material.material_id, saved + elapsed);
@@ -109,33 +119,30 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
   async function markComplete() {
     if (completing || completed) return;
     setCompleting(true);
-    const totalSeconds = saved + elapsed;
+    const total = saved + elapsed;
     try {
       await materialsApi.interact(material.material_id, {
-        time_spent_seconds: totalSeconds,
+        time_spent_seconds: total,
         quiz_score: Math.round(material.confidence_score * 100),
       });
-      saveSeconds(material.material_id, totalSeconds);
+      saveSeconds(material.material_id, total);
       setCompleted(true);
       if (timerRef.current) clearInterval(timerRef.current);
       onCompleted?.();
-    } catch {
-      /* silent */
-    } finally {
-      setCompleting(false);
-    }
+    } catch { /* silent */ }
+    finally { setCompleting(false); }
   }
 
   const totalSeconds = saved + elapsed;
 
-  return (
+  const overlay = (
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] flex flex-col bg-black/85 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <motion.div
@@ -145,7 +152,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="flex flex-col w-full h-full max-w-5xl mx-auto"
           >
-            {/* ── Header bar ── */}
+            {/* ── Header ── */}
             <div className="flex items-start justify-between px-5 py-4 gap-4 shrink-0 border-b border-white/10 bg-[#0d0d14]/90">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -179,9 +186,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
                     {fmtTime(totalSeconds)}
                   </span>
                   {saved > 0 && !completed && (
-                    <span className="text-[10px] text-white/35 ml-0.5">
-                      (resumed)
-                    </span>
+                    <span className="text-[10px] text-white/35 ml-0.5">(resumed)</span>
                   )}
                 </div>
                 <button
@@ -195,32 +200,31 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
               </div>
             </div>
 
-            {/* ── Content viewer ── */}
+            {/* ── Viewer ── */}
             <div className="flex-1 min-h-0 relative bg-[#0a0a12]">
-              {isYouTube && embedUrl ? (
+              {isYouTube && ytEmbed ? (
                 <iframe
-                  src={embedUrl}
+                  src={ytEmbed}
                   title={material.title}
                   className="w-full h-full border-0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 />
-              ) : isPDF && material.file_url ? (
+              ) : isPDF && resolvedUrl ? (
                 <iframe
-                  src={material.file_url}
+                  src={resolvedUrl}
                   title={material.title}
                   className="w-full h-full border-0"
                 />
-              ) : material.file_url ? (
-                /* Webpage — can't embed, show open-in-tab prompt */
+              ) : resolvedUrl ? (
                 <div className="flex flex-col items-center justify-center h-full gap-5 p-8 text-center">
                   <Globe className="w-16 h-16 text-white/15" />
                   <p className="text-white/60 text-sm max-w-sm leading-relaxed">
-                    This material is a web page and can&apos;t be embedded here.
-                    Open it in a new tab to study, then come back and mark it as complete.
+                    This material opens in a new tab. Come back and click
+                    &ldquo;Mark Complete&rdquo; once you&apos;re done.
                   </p>
                   <a
-                    href={material.file_url}
+                    href={resolvedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-grad flex items-center gap-2 text-sm font-semibold px-5 py-2.5"
@@ -230,12 +234,9 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
                   </a>
                 </div>
               ) : (
-                /* No URL at all */
                 <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
                   <BookOpen className="w-16 h-16 text-white/10" />
-                  <p className="text-white/45 text-sm">
-                    No URL is attached to this material yet.
-                  </p>
+                  <p className="text-white/45 text-sm">No file is attached to this material yet.</p>
                 </div>
               )}
             </div>
@@ -264,20 +265,11 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
                 ].join(" ")}
               >
                 {completing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving…
-                  </>
+                  <><Loader2 className="w-4 h-4 animate-spin" />Saving…</>
                 ) : completed ? (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Completed!
-                  </>
+                  <><CheckCircle className="w-4 h-4" />Completed!</>
                 ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Mark Complete
-                  </>
+                  <><CheckCircle className="w-4 h-4" />Mark Complete</>
                 )}
               </button>
             </div>
@@ -286,4 +278,8 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
       )}
     </AnimatePresence>
   );
+
+  // Render into body so CSS transforms on parent cards don't affect position:fixed
+  if (!mounted) return null;
+  return createPortal(overlay, document.body);
 }
