@@ -16,6 +16,7 @@ import {
   X,
   Sun,
   Moon,
+  Building2,
 } from "lucide-react";
 import { clearAuth, getUser } from "@/lib/auth";
 import { useTheme } from "@/components/ThemeProvider";
@@ -121,9 +122,17 @@ export default function Navbar() {
                 <span className="w-7 h-7 rounded-full bg-linear-to-br from-blue-500/40 to-purple-500/30 border border-blue-400/20 flex items-center justify-center text-xs font-bold text-blue-300 shrink-0">
                   {user.full_name.charAt(0).toUpperCase()}
                 </span>
-                <span className="text-sm text-white/60 font-medium truncate max-w-[130px]">
-                  {user.full_name}
-                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm text-white/60 font-medium truncate max-w-[130px]">
+                    {user.full_name}
+                  </span>
+                  {user.school_id && (
+                    <span className="flex items-center gap-1 text-xs text-white/30 truncate max-w-[130px]">
+                      <Building2 className="h-3 w-3 shrink-0" />
+                      {user.school_id}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -210,6 +219,12 @@ export default function Navbar() {
                       {user.full_name}
                     </p>
                     <p className="text-xs text-white/40 capitalize">{user.role}</p>
+                    {user.school_id && (
+                      <p className="flex items-center gap-1 text-xs text-white/30 truncate mt-0.5">
+                        <Building2 className="h-3 w-3 shrink-0" />
+                        {user.school_id}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

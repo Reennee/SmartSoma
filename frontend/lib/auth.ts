@@ -11,6 +11,7 @@ export interface StoredUser {
   user_id: number;
   full_name: string;
   role: "student" | "teacher";
+  school_id: string | null;
 }
 
 export function saveAuth(token: string, user: StoredUser): void {

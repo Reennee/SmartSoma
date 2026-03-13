@@ -23,6 +23,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="student")   # "student" | "teacher"
     grade_level = Column(String(10), nullable=True)                # S1, S2, S3 (students only)
+    school_id = Column(String(50), nullable=True, index=True)      # school / organisation ID
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

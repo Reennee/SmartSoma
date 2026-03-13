@@ -14,6 +14,7 @@ export interface TokenResponse {
   role: "student" | "teacher";
   user_id: number;
   full_name: string;
+  school_id: string | null;
 }
 
 export interface UserOut {
@@ -22,6 +23,7 @@ export interface UserOut {
   email: string;
   role: string;
   grade_level: string | null;
+  school_id: string | null;
   created_at: string;
 }
 
@@ -218,6 +220,7 @@ export const authApi = {
     password: string;
     role: string;
     grade_level?: string;
+    school_id?: string;
   }) => request<TokenResponse>("/api/auth/register", { method: "POST", body: JSON.stringify(data) }),
 
   login: (email: string, password: string) =>

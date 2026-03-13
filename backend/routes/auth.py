@@ -40,6 +40,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         password_hash=hash_password(payload.password),
         role=payload.role,
         grade_level=payload.grade_level,
+        school_id=payload.school_id,
     )
     db.add(user)
     db.commit()
@@ -54,6 +55,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         role=user.role,
         user_id=user.user_id,
         full_name=user.full_name,
+        school_id=user.school_id,
     )
 
 
@@ -76,6 +78,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         role=user.role,
         user_id=user.user_id,
         full_name=user.full_name,
+        school_id=user.school_id,
     )
 
 

@@ -15,6 +15,7 @@ import {
   Users,
   BookOpen,
   TrendingUp,
+  Building2,
 } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
@@ -72,6 +73,7 @@ interface FormState {
   password: string;
   role: Role;
   grade_level: Grade;
+  school_id: string;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -85,6 +87,7 @@ export default function RegisterPage() {
     password: "",
     role: "student",
     grade_level: "S1",
+    school_id: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -105,12 +108,14 @@ export default function RegisterPage() {
         password: form.password,
         role: form.role,
         grade_level: form.role === "student" ? form.grade_level : undefined,
+        school_id: form.school_id || undefined,
       };
       const data = await authApi.register(payload);
       saveAuth(data.access_token, {
         user_id: data.user_id,
         full_name: data.full_name,
         role: data.role,
+        school_id: data.school_id ?? null,
       });
       router.push(
         data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard"
@@ -318,6 +323,27 @@ export default function RegisterPage() {
                       {r}
                     </button>
                   ))}
+                </div>
+              </motion.div>
+
+              {/* School / Organisation ID */}
+              <motion.div
+                {...fadeUpProps(0.40)}
+                className="flex flex-col gap-1.5"
+              >
+                <label className="text-white/70 text-sm font-medium">
+                  School / Organisation ID{" "}
+                  <span className="text-white/30 font-normal">(optional)</span>
+                </label>
+                <div className="relative">
+                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="e.g. GS-KIGALI-001"
+                    value={form.school_id}
+                    onChange={(e) => update("school_id", e.target.value)}
+                    className="input-premium pl-11"
+                  />
                 </div>
               </motion.div>
 

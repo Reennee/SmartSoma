@@ -43,6 +43,9 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_url VARCHAR(500)"
             ))
             conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id VARCHAR(50)"
+            ))
+            conn.execute(text(
                 "ALTER TABLE materials ADD COLUMN IF NOT EXISTS extracted_text TEXT"
             ))
             conn.execute(text(

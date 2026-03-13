@@ -26,12 +26,16 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 @router.get("/class", response_model=ClassAnalyticsOut)
 def class_analytics(
     db: Session = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_teacher: User = Depends(require_teacher),
 ):
     """
     Teacher dashboard: all students' mastery summaries + competency heatmap.
+    Scoped to the teacher's school if school_id is set.
     """
-    students = db.query(User).filter(User.role == "student").all()
+    q = db.query(User).filter(User.role == "student")
+    if current_teacher.school_id:
+        q = q.filter(User.school_id == current_teacher.school_id)
+    students = q.all()
 
     student_summaries = []
     for student in students:
@@ -98,13 +102,17 @@ def class_analytics(
 @router.get("/at-risk", response_model=list[AtRiskStudent])
 def at_risk_students(
     db: Session = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_teacher: User = Depends(require_teacher),
 ):
     """
     Returns students whose mastery is below 40% OR who have fewer than 5 interactions.
+    Scoped to the teacher's school if school_id is set.
     Also flags whether a warning has already been sent this week.
     """
-    students = db.query(User).filter(User.role == "student").all()
+    q = db.query(User).filter(User.role == "student")
+    if current_teacher.school_id:
+        q = q.filter(User.school_id == current_teacher.school_id)
+    students = q.all()
     result = []
     for student in students:
         mastery_rows = (

@@ -75,6 +75,7 @@ export default function LoginPage() {
         user_id: data.user_id,
         full_name: data.full_name,
         role: data.role,
+        school_id: data.school_id,
       });
       router.push(
         data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard"

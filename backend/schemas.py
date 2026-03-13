@@ -16,6 +16,7 @@ class RegisterRequest(BaseModel):
     password: str
     role: str = "student"          # "student" | "teacher"
     grade_level: Optional[str] = None  # S1, S2, S3
+    school_id: Optional[str] = None    # school / organisation ID
 
     @field_validator("role")
     @classmethod
@@ -43,6 +44,7 @@ class TokenResponse(BaseModel):
     role: str
     user_id: int
     full_name: str
+    school_id: Optional[str] = None
 
 
 # ─── Users ───────────────────────────────────────────────────────────────────
@@ -53,6 +55,7 @@ class UserOut(BaseModel):
     email: str
     role: str
     grade_level: Optional[str]
+    school_id: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
