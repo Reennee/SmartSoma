@@ -30,6 +30,7 @@ class User(Base):
     recommendations = relationship("Recommendation", back_populates="user")
     interactions = relationship("InteractionLog", back_populates="user")
     subject_grades = relationship("StudentSubjectGrade", back_populates="user")
+    warnings = relationship("StudentWarning", back_populates="user")
 
 
 class CBCCompetency(Base):
@@ -122,6 +123,22 @@ class StudentSubjectGrade(Base):
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="subject_grades")
+
+
+class StudentWarning(Base):
+    """A warning/nudge sent by a teacher to an at-risk student."""
+    __tablename__ = "student_warnings"
+    __table_args__ = (
+        Index("ix_warning_user_id", "user_id"),
+    )
+
+    warning_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    message = Column(Text, nullable=False)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    is_read = Column(Boolean, default=False)
+
+    user = relationship("User", back_populates="warnings")
 
 
 class InteractionLog(Base):

@@ -294,9 +294,38 @@ export const materialsApi = {
     }),
 };
 
+export interface WarningOut {
+  warning_id: number;
+  message: string;
+  sent_at: string;
+  is_read: boolean;
+}
+
+export interface AtRiskStudent {
+  user_id: number;
+  full_name: string;
+  grade_level: string | null;
+  overall_mastery: number;
+  total_interactions: number;
+  last_interaction: string | null;
+  warning_already_sent: boolean;
+}
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 export const analyticsApi = {
   classOverview: () => request<ClassAnalyticsOut>("/api/analytics/class"),
   stats: () => request<SystemStats>("/api/analytics/stats"),
+  atRisk: () => request<AtRiskStudent[]>("/api/analytics/at-risk"),
+  warnStudent: (student_id: number, message?: string) =>
+    request<{ sent: boolean; student: string }>(`/api/analytics/warn/${student_id}`, {
+      method: "POST",
+      body: JSON.stringify({ message: message ?? null }),
+    }),
+};
+
+export const warningsApi = {
+  getMyWarnings: () => request<WarningOut[]>("/api/students/me/warnings"),
+  dismiss: (warning_id: number) =>
+    request<void>(`/api/students/me/warnings/${warning_id}/read`, { method: "POST" }),
 };

@@ -42,6 +42,15 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_url VARCHAR(500)"
             ))
+            conn.execute(text(
+                """CREATE TABLE IF NOT EXISTS student_warnings (
+                    warning_id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(user_id),
+                    message TEXT NOT NULL,
+                    sent_at TIMESTAMP DEFAULT NOW(),
+                    is_read BOOLEAN DEFAULT FALSE
+                )"""
+            ))
             conn.commit()
         logger.info("✅ DB schema up to date")
     except Exception as exc:

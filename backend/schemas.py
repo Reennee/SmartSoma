@@ -267,6 +267,31 @@ class MaterialPreviewResponse(BaseModel):
     link_type: str   # "youtube" | "pdf" | "webpage"
 
 
+# ─── At-Risk / Warnings ──────────────────────────────────────────────────────
+
+class AtRiskStudent(BaseModel):
+    user_id: int
+    full_name: str
+    grade_level: Optional[str]
+    overall_mastery: float
+    total_interactions: int
+    last_interaction: Optional[datetime]
+    warning_already_sent: bool
+
+
+class WarnStudentRequest(BaseModel):
+    message: Optional[str] = None
+
+
+class WarningOut(BaseModel):
+    warning_id: int
+    message: str
+    sent_at: datetime
+    is_read: bool
+
+    model_config = {"from_attributes": True}
+
+
 # ─── System ──────────────────────────────────────────────────────────────────
 
 class HealthCheck(BaseModel):

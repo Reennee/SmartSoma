@@ -15,11 +15,12 @@ from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user, require_teacher
 from backend.database import get_db
-from backend.models import CBCCompetency, InteractionLog, Material, StudentMasteryLog, StudentSubjectGrade, User
+from backend.models import CBCCompetency, InteractionLog, Material, StudentMasteryLog, StudentSubjectGrade, StudentWarning, User
 from backend.schemas import (
     MasteryEntry, RecentInteraction, StudentProgressOut,
     TestUploadRequest, TestUploadResponse,
     SubjectGradeUploadRequest, SubjectGradeUploadResponse, SubjectGradeOut,
+    WarningOut,
 )
 
 router = APIRouter(prefix="/api/students", tags=["students"])
@@ -260,6 +261,42 @@ def get_subject_grades(
         .all()
     )
     return [SubjectGradeOut(subject=g.subject, grade=g.grade, last_updated=g.last_updated) for g in grades]
+
+
+@router.get("/me/warnings", response_model=list[WarningOut])
+def get_my_warnings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all unread warnings for the authenticated student."""
+    warnings = (
+        db.query(StudentWarning)
+        .filter(StudentWarning.user_id == current_user.user_id, StudentWarning.is_read == False)  # noqa: E712
+        .order_by(StudentWarning.sent_at.desc())
+        .all()
+    )
+    return [WarningOut(
+        warning_id=w.warning_id,
+        message=w.message,
+        sent_at=w.sent_at,
+        is_read=w.is_read,
+    ) for w in warnings]
+
+
+@router.post("/me/warnings/{warning_id}/read", status_code=204)
+def dismiss_warning(
+    warning_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a warning as read (dismiss it)."""
+    warning = db.query(StudentWarning).filter(
+        StudentWarning.warning_id == warning_id,
+        StudentWarning.user_id == current_user.user_id,
+    ).first()
+    if warning:
+        warning.is_read = True
+        db.commit()
 
 
 @router.get("/{student_id}/progress", response_model=StudentProgressOut)

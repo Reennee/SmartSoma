@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, BookOpen, Brain, Clock, Sparkles, ChevronDown } from "lucide-react";
+import { TrendingUp, BookOpen, Brain, Clock, Sparkles, ChevronDown, AlertTriangle, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import RecommendationCard from "@/components/RecommendationCard";
 import MasteryRadar from "@/components/MasteryRadar";
@@ -11,9 +11,11 @@ import SubjectGradeModal from "@/components/SubjectGradeModal";
 import {
   recommendApi,
   studentApi,
+  warningsApi,
   type RecommendedMaterial,
   type StudentProgressOut,
   type SubjectGradeOut,
+  type WarningOut,
 } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 
@@ -156,6 +158,7 @@ export default function StudentDashboard() {
   const [gradeModalOpen, setGradeModalOpen] = useState(false);
   const [subjectGrades, setSubjectGrades] = useState<SubjectGradeOut[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>("");
+  const [warnings, setWarnings] = useState<WarningOut[]>([]);
 
   const user = useSyncExternalStore(
     (cb) => { window.addEventListener("storage", cb); return () => window.removeEventListener("storage", cb); },
@@ -190,7 +193,16 @@ export default function StudentDashboard() {
     }
   }, []);
 
-  useEffect(() => { load(); loadGrades(); }, [load, loadGrades]);
+  useEffect(() => {
+    load();
+    loadGrades();
+    warningsApi.getMyWarnings().then(setWarnings).catch(() => {});
+  }, [load, loadGrades]);
+
+  async function dismissWarning(warning_id: number) {
+    await warningsApi.dismiss(warning_id).catch(() => {});
+    setWarnings((prev) => prev.filter((w) => w.warning_id !== warning_id));
+  }
 
   const overallPct = progress ? Math.round(progress.overall_mastery * 100) : 0;
   const firstName = user?.full_name?.split(" ")[0] ?? "Student";
@@ -272,6 +284,31 @@ export default function StudentDashboard() {
               </button>
             </div>
           </motion.div>
+
+          {/* ── Teacher warnings ── */}
+          <AnimatePresence>
+            {warnings.map((w) => (
+              <motion.div
+                key={w.warning_id}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-start gap-3 px-4 py-3 rounded-2xl border border-amber-400/30 bg-amber-500/10"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="flex-1 text-sm text-amber-200 leading-relaxed">{w.message}</p>
+                <button
+                  type="button"
+                  onClick={() => dismissWarning(w.warning_id)}
+                  className="p-1 rounded-lg text-amber-400/60 hover:text-amber-300 hover:bg-amber-400/10 transition-colors shrink-0"
+                  aria-label="Dismiss warning"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
           {/* ── Stats row ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

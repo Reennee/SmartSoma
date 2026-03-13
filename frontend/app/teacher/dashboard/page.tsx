@@ -14,12 +14,17 @@ import {
   ChevronRight,
   X,
   Plus,
+  AlertTriangle,
+  Bell,
+  BellOff,
+  CheckCircle,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AddMaterialModal from "@/components/AddMaterialModal";
 import {
   analyticsApi,
   studentApi,
+  type AtRiskStudent,
   type ClassAnalyticsOut,
   type StudentProgressOut,
   type StudentSummary,
@@ -265,6 +270,156 @@ function StudentPanel({
     </motion.div>
   );
 }
+
+// ─── At-Risk Panel ─────────────────────────────────────────────────────────────
+
+function AtRiskPanel() {
+  const [students, setStudents] = useState<AtRiskStudent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [warned, setWarned] = useState<Record<number, boolean>>({});
+  const [warning, setWarning] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    analyticsApi.atRisk()
+      .then(setStudents)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function sendWarning(student: AtRiskStudent) {
+    if (warning[student.user_id]) return;
+    setWarning((w) => ({ ...w, [student.user_id]: true }));
+    try {
+      await analyticsApi.warnStudent(student.user_id);
+      setWarned((w) => ({ ...w, [student.user_id]: true }));
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.user_id === student.user_id ? { ...s, warning_already_sent: true } : s
+        )
+      );
+    } catch {
+      /* silent */
+    } finally {
+      setWarning((w) => ({ ...w, [student.user_id]: false }));
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="gcard p-6 space-y-3">
+        <div className="skeleton h-5 w-40 rounded" />
+        {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-14 rounded-xl" />)}
+      </div>
+    );
+  }
+
+  if (students.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="gcard p-6"
+      >
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-500/15">
+            <CheckCircle className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">At-Risk Students</h2>
+            <p className="text-xs text-white/38 mt-0.5">All students are on track — no interventions needed.</p>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.5 }}
+      className="gcard p-6"
+    >
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-500/15">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white">At-Risk Students</h2>
+          <p className="text-xs text-white/38 mt-0.5">
+            {students.length} student{students.length !== 1 ? "s" : ""} with low mastery or minimal activity
+          </p>
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div className="grid grid-cols-[1fr_60px_70px_100px_110px] gap-3 px-3 mb-2">
+        {["Name", "Grade", "Sessions", "Mastery", ""].map((h) => (
+          <span key={h} className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">{h}</span>
+        ))}
+      </div>
+
+      <div className="space-y-1.5">
+        {students.map((student, i) => {
+          const pct = Math.round(student.overall_mastery * 100);
+          const alreadyWarned = student.warning_already_sent || warned[student.user_id];
+          const isSending = warning[student.user_id];
+
+          return (
+            <motion.div
+              key={student.user_id}
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="grid grid-cols-[1fr_60px_70px_100px_110px] gap-3 items-center px-3 py-3 rounded-xl border border-red-500/15 bg-red-500/5"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{student.full_name}</p>
+                {student.last_interaction && (
+                  <p className="text-[10px] text-white/30 mt-0.5">
+                    Last seen {new Date(student.last_interaction).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+              <span className="text-xs text-white/48 font-medium">{student.grade_level ?? "—"}</span>
+              <span className="text-xs text-white/48 font-medium">{student.total_interactions}</span>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-linear-to-r from-red-500 to-rose-400"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-red-400 w-8 text-right">{pct}%</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => sendWarning(student)}
+                disabled={isSending || alreadyWarned}
+                className={[
+                  "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                  alreadyWarned
+                    ? "bg-white/5 text-white/30 border border-white/10 cursor-default"
+                    : "bg-amber-500/15 text-amber-300 border border-amber-400/30 hover:bg-amber-500/25",
+                  isSending ? "opacity-60" : "",
+                ].join(" ")}
+              >
+                {alreadyWarned ? (
+                  <><BellOff className="w-3 h-3" /> Warned</>
+                ) : (
+                  <><Bell className="w-3 h-3" /> {isSending ? "Sending…" : "Warn"}</>
+                )}
+              </button>
+            </motion.div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 
@@ -575,6 +730,9 @@ export default function TeacherDashboardPage() {
                   )}
                 </motion.div>
               </motion.div>
+
+              {/* ── At-Risk Students ── */}
+              <AtRiskPanel />
 
               {/* ── Competency Heatmap Preview ── */}
               <motion.div
