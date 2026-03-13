@@ -40,5 +40,8 @@ anthropic>=0.25.0
 # ─── PDF Generation (local study materials) ───────────────────────────────────
 fpdf2>=2.7.9
 
+# ─── PDF Text Extraction (teacher-uploaded materials) ─────────────────────────
+pypdf>=3.0.0
+
 # ─── Utilities ────────────────────────────────────────────────────────────────
 requests==2.31.0

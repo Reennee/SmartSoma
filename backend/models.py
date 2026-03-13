@@ -65,6 +65,8 @@ class Material(Base):
     content_type = Column(String(50), nullable=True)        # PDF | Video | Interactive Exercise
     duration_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    extracted_text = Column(Text, nullable=True)            # Full text extracted from PDF/webpage
+    extraction_status = Column(String(20), nullable=True)   # "pending" | "done" | "failed"
 
     # Relationships
     competency = relationship("CBCCompetency", back_populates="materials")

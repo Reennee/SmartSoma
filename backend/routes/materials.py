@@ -11,7 +11,7 @@ POST /api/materials/{id}/interact       — log an interaction + update mastery
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,31 @@ def _enrich(material: Material) -> dict:
     d = {c.name: getattr(material, c.name) for c in material.__table__.columns}
     d["competency_name"] = material.competency.competency_name if material.competency else ""
     return d
+
+
+def _do_extract(material_id: int) -> None:
+    """Background task: download PDF and extract its text."""
+    from backend.database import SessionLocal
+    from backend.services.extractor import extract_pdf_text
+    db = SessionLocal()
+    try:
+        mat = db.query(Material).filter(Material.material_id == material_id).first()
+        if not mat or not mat.file_url:
+            return
+        text = extract_pdf_text(mat.file_url)
+        mat.extracted_text = text
+        mat.extraction_status = "done"
+    except Exception as exc:
+        logger.warning("Text extraction failed for material %s: %s", material_id, exc)
+        if mat:
+            mat.extraction_status = "failed"
+    finally:
+        db.commit()
+        db.close()
+
+
+import logging as _logging
+logger = _logging.getLogger(__name__)
 
 
 @router.get("/competencies", response_model=list[CompetencyOut])
@@ -113,11 +138,13 @@ def preview_material(
 @router.post("", response_model=MaterialOut, status_code=201)
 def create_material(
     payload: MaterialCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Create a new learning material. Teacher-only.
+    Pass extract_content=true to trigger background PDF text extraction.
     """
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can create materials")
@@ -128,6 +155,8 @@ def create_material(
     if not competency:
         raise HTTPException(status_code=400, detail="competency_id not found")
 
+    will_extract = payload.extract_content and bool(payload.file_url)
+
     material = Material(
         title=payload.title,
         description=payload.description,
@@ -137,10 +166,15 @@ def create_material(
         difficulty_level=payload.difficulty_level,
         content_type=payload.content_type,
         duration_minutes=payload.duration_minutes,
+        extraction_status="pending" if will_extract else None,
     )
     db.add(material)
     db.commit()
     db.refresh(material)
+
+    if will_extract:
+        background_tasks.add_task(_do_extract, material.material_id)
+
     return _enrich(material)
 
 

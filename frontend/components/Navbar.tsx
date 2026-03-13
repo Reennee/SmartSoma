@@ -14,8 +14,11 @@ import {
   LogOut,
   Menu,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { clearAuth, getUser } from "@/lib/auth";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface NavLink {
   href: string;
@@ -43,6 +46,7 @@ export default function Navbar() {
     () => null,
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   function logout() {
     clearAuth();
@@ -122,6 +126,20 @@ export default function Navbar() {
                 </span>
               </div>
             )}
+
+            {/* Theme toggle (desktop) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-xl border border-white/10 bg-white/5 text-white/70 hover:text-yellow-300 hover:border-yellow-400/40 transition-all duration-200"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
 
             {/* Logout button */}
             <button
@@ -231,8 +249,20 @@ export default function Navbar() {
                 })}
               </nav>
 
-              {/* Mobile logout */}
+              {/* Mobile theme toggle + logout */}
               <div className="px-3 pb-3">
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="mb-2 flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-yellow-300 hover:bg-white/5 transition-all duration-200"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                  {theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                </button>
                 <button
                   type="button"
                   onClick={logout}

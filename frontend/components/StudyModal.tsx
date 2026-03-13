@@ -25,6 +25,7 @@ import {
   Youtube,
   FileText,
   Globe,
+  AlignLeft,
 } from "lucide-react";
 import { materialsApi, type RecommendedMaterial } from "@/lib/api";
 
@@ -78,6 +79,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted]   = useState(false);
   const [mounted, setMounted]       = useState(false);   // SSR guard for portal
+  const [activeTab, setActiveTab]   = useState<"text" | "media">("media");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Portal requires document — wait until client mount
@@ -100,15 +102,19 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
 
   const ytEmbed = isYouTube && resolvedUrl ? youtubeEmbedUrl(resolvedUrl) : null;
 
-  // Timer: start on open, pause on close
+  const hasText = material.extraction_status === "done" && !!material.extracted_text;
+  const canExtract = material.extraction_status === "pending" || hasText;
+
+  // Timer: start on open, pause on close; default tab = "text" when text is ready
   useEffect(() => {
     if (!open) return;
     setSaved(loadSavedSeconds(material.material_id));
     setElapsed(0);
     setCompleted(false);
+    setActiveTab(hasText ? "text" : "media");
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [open, material.material_id]);
+  }, [open, material.material_id, hasText]);
 
   function handleClose() {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -200,44 +206,118 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
               </div>
             </div>
 
+            {/* ── Tab bar (only shown when text extraction is available) ── */}
+            {!isYouTube && canExtract && (
+              <div className="flex shrink-0 border-b border-white/8 bg-[#0d0d14]/90 px-5 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("text")}
+                  className={[
+                    "flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition-colors",
+                    activeTab === "text"
+                      ? "border-violet-400 text-violet-300"
+                      : "border-transparent text-white/40 hover:text-white/60",
+                  ].join(" ")}
+                >
+                  <AlignLeft className="w-3.5 h-3.5" />
+                  Read Text
+                  {material.extraction_status === "pending" && (
+                    <Loader2 className="w-3 h-3 animate-spin ml-0.5 text-white/30" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("media")}
+                  className={[
+                    "flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition-colors",
+                    activeTab === "media"
+                      ? "border-violet-400 text-violet-300"
+                      : "border-transparent text-white/40 hover:text-white/60",
+                  ].join(" ")}
+                >
+                  {isPDF ? <FileText className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+                  {isPDF ? "PDF" : "Web"}
+                </button>
+              </div>
+            )}
+
             {/* ── Viewer ── */}
             <div className="flex-1 min-h-0 relative bg-[#0a0a12]">
-              {isYouTube && ytEmbed ? (
-                <iframe
-                  src={ytEmbed}
-                  title={material.title}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : isPDF && resolvedUrl ? (
-                <iframe
-                  src={resolvedUrl}
-                  title={material.title}
-                  className="w-full h-full border-0"
-                />
-              ) : resolvedUrl ? (
-                <div className="flex flex-col items-center justify-center h-full gap-5 p-8 text-center">
-                  <Globe className="w-16 h-16 text-white/15" />
-                  <p className="text-white/60 text-sm max-w-sm leading-relaxed">
-                    This material opens in a new tab. Come back and click
-                    &ldquo;Mark Complete&rdquo; once you&apos;re done.
-                  </p>
-                  <a
-                    href={resolvedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-grad flex items-center gap-2 text-sm font-semibold px-5 py-2.5"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Open Material
-                  </a>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
-                  <BookOpen className="w-16 h-16 text-white/10" />
-                  <p className="text-white/45 text-sm">No file is attached to this material yet.</p>
-                </div>
+              {/* Text reader tab */}
+              {!isYouTube && activeTab === "text" && (
+                <>
+                  {material.extraction_status === "pending" && (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+                      <Loader2 className="w-8 h-8 text-violet-400/60 animate-spin" />
+                      <p className="text-white/50 text-sm">Extracting text, check back soon…</p>
+                      <p className="text-white/25 text-xs max-w-xs">
+                        The PDF is being downloaded and processed in the background. Try again in a few seconds.
+                      </p>
+                    </div>
+                  )}
+                  {material.extraction_status === "failed" && (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+                      <BookOpen className="w-10 h-10 text-amber-400/40" />
+                      <p className="text-amber-300/80 text-sm">Text extraction failed.</p>
+                      {resolvedUrl && (
+                        <a href={resolvedUrl} target="_blank" rel="noopener noreferrer"
+                          className="btn-grad flex items-center gap-2 text-sm font-semibold px-4 py-2">
+                          <ExternalLink className="w-4 h-4" /> Open Original
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {material.extraction_status === "done" && material.extracted_text && (
+                    <div className="h-full overflow-y-auto px-8 py-6">
+                      <pre className="whitespace-pre-wrap font-sans text-sm text-white/80 leading-relaxed max-w-3xl mx-auto">
+                        {material.extracted_text}
+                      </pre>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Media tab (YouTube / PDF iframe / web link) */}
+              {(isYouTube || activeTab === "media") && (
+                <>
+                  {isYouTube && ytEmbed ? (
+                    <iframe
+                      src={ytEmbed}
+                      title={material.title}
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : isPDF && resolvedUrl ? (
+                    <iframe
+                      src={resolvedUrl}
+                      title={material.title}
+                      className="w-full h-full border-0"
+                    />
+                  ) : resolvedUrl ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-5 p-8 text-center">
+                      <Globe className="w-16 h-16 text-white/15" />
+                      <p className="text-white/60 text-sm max-w-sm leading-relaxed">
+                        This material opens in a new tab. Come back and click
+                        &ldquo;Mark Complete&rdquo; once you&apos;re done.
+                      </p>
+                      <a
+                        href={resolvedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-grad flex items-center gap-2 text-sm font-semibold px-5 py-2.5"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Open Material
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+                      <BookOpen className="w-16 h-16 text-white/10" />
+                      <p className="text-white/45 text-sm">No file is attached to this material yet.</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

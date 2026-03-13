@@ -3,6 +3,7 @@ URL Content Extractor + Claude AI Metadata Extractor
 Supports YouTube, PDF, and general web pages.
 """
 
+import io
 import json
 import logging
 import os
@@ -213,7 +214,7 @@ Return JSON with exactly these keys (use null for unknown fields):
         raise HTTPException(status_code=502, detail="AI extraction failed — fill fields manually")
 
     return {
-        "title": extracted.get("title") or raw["title"] or None,
+        "title":            extracted.get("title") or raw["title"] or None,
         "description": extracted.get("description") or None,
         "subject": extracted.get("subject") if extracted.get("subject") in _VALID_SUBJECTS else None,
         "competency_name": extracted.get("competency_name") if extracted.get("competency_name") in competencies else None,
@@ -224,3 +225,36 @@ Return JSON with exactly these keys (use null for unknown fields):
         "file_url": url,
         "link_type": raw["link_type"],
     }
+
+
+# ── PDF text extractor ─────────────────────────────────────────────────────────
+
+def extract_pdf_text(url: str, max_pages: int = 50) -> str:
+    """
+    Download a PDF from `url` and extract its text content.
+    Returns the extracted text (capped at 100,000 chars).
+    Raises ValueError if the PDF cannot be downloaded or parsed.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        raise ValueError("pypdf is not installed — run: pip install pypdf")
+
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=30, stream=True)
+        resp.raise_for_status()
+        content = b"".join(resp.iter_content(chunk_size=65536))
+    except Exception as exc:
+        raise ValueError(f"Could not download PDF: {exc}")
+
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        parts = []
+        for page in reader.pages[:max_pages]:
+            text = page.extract_text()
+            if text:
+                parts.append(text.strip())
+        full_text = "\n\n".join(parts)
+        return full_text[:100_000]
+    except Exception as exc:
+        raise ValueError(f"Could not parse PDF: {exc}")

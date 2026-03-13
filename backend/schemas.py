@@ -83,6 +83,8 @@ class MaterialOut(BaseModel):
     content_type: Optional[str]
     duration_minutes: Optional[int]
     file_url: Optional[str] = None
+    extracted_text: Optional[str] = None
+    extraction_status: Optional[str] = None  # "pending" | "done" | "failed"
 
     model_config = {"from_attributes": True}
 
@@ -117,6 +119,8 @@ class RecommendedMaterial(BaseModel):
     duration_minutes: Optional[int]
     file_url: Optional[str] = None
     file_path: Optional[str] = None   # local static path served by FastAPI
+    extracted_text: Optional[str] = None
+    extraction_status: Optional[str] = None  # "pending" | "done" | "failed"
     confidence_score: float
     current_mastery: float
 
@@ -249,6 +253,7 @@ class MaterialCreate(BaseModel):
     difficulty_level: str
     content_type: Optional[str] = None
     duration_minutes: Optional[int] = None
+    extract_content: bool = False   # if True, extract text from file_url in background
 
 
 class MaterialPreviewRequest(BaseModel):

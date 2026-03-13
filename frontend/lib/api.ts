@@ -37,6 +37,8 @@ export interface RecommendedMaterial {
   duration_minutes: number | null;
   file_url: string | null;
   file_path: string | null;  // local static path, e.g. /static/materials/math/s1/foo.pdf
+  extracted_text: string | null;
+  extraction_status: "pending" | "done" | "failed" | null;
   confidence_score: number;
   current_mastery: number;
 }
@@ -99,6 +101,8 @@ export interface MaterialOut {
   content_type: string | null;
   duration_minutes: number | null;
   file_url: string | null;
+  extracted_text: string | null;
+  extraction_status: "pending" | "done" | "failed" | null;
 }
 
 export interface PagedMaterials {
@@ -156,6 +160,7 @@ export interface MaterialCreate {
   difficulty_level: string;
   content_type?: string;
   duration_minutes?: number;
+  extract_content?: boolean;
 }
 
 export interface SubjectGradeEntry {
