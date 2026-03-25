@@ -22,12 +22,13 @@ import {
   ExternalLink,
   CheckCircle,
   Loader2,
-  Youtube,
+  PlayCircle,
   FileText,
   Globe,
   AlignLeft,
 } from "lucide-react";
-import { materialsApi, type RecommendedMaterial } from "@/lib/api";
+import { materialsApi, type RecommendedMaterial, type MaterialOut } from "@/lib/api";
+import QuizModal from "@/components/QuizModal";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@ function fmtTime(seconds: number) {
 // ── Props ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  material: RecommendedMaterial;
+  material: RecommendedMaterial | MaterialOut;
   open: boolean;
   onClose: () => void;
   onCompleted?: () => void;
@@ -80,6 +81,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
   const [completed, setCompleted]   = useState(false);
   const [mounted, setMounted]       = useState(false);   // SSR guard for portal
   const [activeTab, setActiveTab]   = useState<"text" | "media">("media");
+  const [showQuiz, setShowQuiz]     = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Portal requires document — wait until client mount
@@ -122,21 +124,32 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
     onClose();
   }
 
-  async function markComplete() {
+  function markComplete() {
     if (completing || completed) return;
+    // Pause timer and show quiz before submitting
+    if (timerRef.current) clearInterval(timerRef.current);
+    setShowQuiz(true);
+  }
+
+  async function submitWithScore(quizScore: number) {
+    setShowQuiz(false);
     setCompleting(true);
     const total = saved + elapsed;
     try {
       await materialsApi.interact(material.material_id, {
         time_spent_seconds: total,
-        quiz_score: Math.round(material.confidence_score * 100),
+        quiz_score: quizScore,
       });
       saveSeconds(material.material_id, total);
       setCompleted(true);
-      if (timerRef.current) clearInterval(timerRef.current);
       onCompleted?.();
     } catch { /* silent */ }
     finally { setCompleting(false); }
+  }
+
+  function skipQuiz() {
+    const confidence = "confidence_score" in material ? material.confidence_score : 0.7;
+    submitWithScore(Math.round(confidence * 100));
   }
 
   const totalSeconds = saved + elapsed;
@@ -164,7 +177,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
                 <div className="flex items-center gap-2 mb-1">
                   {isYouTube ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-400/25">
-                      <Youtube className="w-3 h-3" /> YouTube
+                      <PlayCircle className="w-3 h-3" /> YouTube
                     </span>
                   ) : isPDF ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-400/25">
@@ -361,5 +374,18 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
 
   // Render into body so CSS transforms on parent cards don't affect position:fixed
   if (!mounted) return null;
-  return createPortal(overlay, document.body);
+  return (
+    <>
+      {createPortal(overlay, document.body)}
+      <QuizModal
+        open={showQuiz}
+        materialId={material.material_id}
+        subject={material.subject ?? "Mathematics"}
+        difficulty={material.difficulty_level ?? "Beginner"}
+        materialTitle={material.title}
+        onComplete={submitWithScore}
+        onSkip={skipQuiz}
+      />
+    </>
+  );
 }

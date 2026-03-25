@@ -21,7 +21,7 @@ import {
   Link2,
   Loader2,
   CheckCircle,
-  Youtube,
+  PlayCircle,
   FileText,
   Globe,
   BookOpen,
@@ -55,7 +55,7 @@ function LinkTypeBadge({ type }: { type: string }) {
   if (type === "youtube")
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-400/25">
-        <Youtube className="w-3 h-3" /> YouTube
+        <PlayCircle className="w-3 h-3" /> YouTube
       </span>
     );
   if (type === "pdf")
@@ -139,9 +139,17 @@ export default function AddMaterialModal({ open, onClose, onSuccess }: Props) {
         if (match) setCompetencyId(match.competency_id);
       }
       setPhase("review");
-    } catch (err: unknown) {
-      setUrlError(err instanceof Error ? err.message : "Could not analyze URL");
-      setPhase("url");
+    } catch {
+      // AI unavailable — detect link type from URL and go straight to manual review
+      const trimmed = url.trim();
+      const isYT = trimmed.includes("youtube.com") || trimmed.includes("youtu.be");
+      const isPDF = trimmed.toLowerCase().endsWith(".pdf");
+      const linkType = isYT ? "youtube" : isPDF ? "pdf" : "webpage";
+      setPreview({ title: null, description: null, subject: null, competency_name: null,
+        grade_level: null, difficulty_level: null, content_type: null,
+        duration_minutes: null, file_url: trimmed, link_type: linkType });
+      setContentType(isYT ? "Video" : isPDF ? "PDF" : "");
+      setPhase("review");
     }
   }
 
@@ -221,7 +229,7 @@ export default function AddMaterialModal({ open, onClose, onSuccess }: Props) {
               {phase === "url" && (
                 <div className="space-y-4">
                   <p className="text-sm text-white/55">
-                    Paste a link to a PDF, YouTube video, or web page. Claude AI will auto-fill the details.
+                    Paste a link to a <strong className="text-white/80">PDF</strong> or <strong className="text-white/80">YouTube video</strong> (or any web page). Claude AI will auto-fill the curriculum details.
                   </p>
                   <div>
                     <label className={fieldLabel}>Material URL</label>
@@ -255,7 +263,7 @@ export default function AddMaterialModal({ open, onClose, onSuccess }: Props) {
                   <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
                   <p className="text-white/60 text-sm">Analyzing with AI…</p>
                   <p className="text-white/30 text-xs max-w-xs text-center">
-                    Claude is reading the page and extracting curriculum metadata.
+                    If AI is unavailable, the form will open for manual entry.
                   </p>
                 </div>
               )}
@@ -390,8 +398,8 @@ export default function AddMaterialModal({ open, onClose, onSuccess }: Props) {
                     />
                   </div>
 
-                  {/* Extract text checkbox — only for PDF / webpage */}
-                  {(preview.link_type === "pdf" || preview.link_type === "webpage") && (
+                  {/* Extract + download checkbox — PDF only */}
+                  {preview.link_type === "pdf" && (
                     <label className="flex items-start gap-3 p-3 bg-violet-500/8 border border-violet-500/20 rounded-xl cursor-pointer hover:bg-violet-500/12 transition-colors">
                       <input
                         type="checkbox"
@@ -400,13 +408,24 @@ export default function AddMaterialModal({ open, onClose, onSuccess }: Props) {
                         className="mt-0.5 accent-violet-500"
                       />
                       <div>
-                        <p className="text-sm font-medium text-white">Extract text for inline reading</p>
+                        <p className="text-sm font-medium text-white">Download PDF &amp; extract text</p>
                         <p className="text-xs text-white/45 mt-0.5">
-                          Downloads the {preview.link_type === "pdf" ? "PDF" : "page"} in the background and
-                          extracts the full text so students can read it inside the app.
+                          Saves a local copy of the PDF on the server (enables offline reading) and
+                          extracts the full text so students can read it inside the app without a browser.
                         </p>
                       </div>
                     </label>
+                  )}
+
+                  {/* YouTube info banner */}
+                  {preview.link_type === "youtube" && (
+                    <div className="flex items-start gap-3 p-3 bg-red-500/8 border border-red-400/20 rounded-xl">
+                      <PlayCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-white/50">
+                        YouTube video — will be embedded directly in the student study view.
+                        No download needed.
+                      </p>
+                    </div>
                   )}
 
                   {saveError && <p className="text-red-400 text-xs">{saveError}</p>}

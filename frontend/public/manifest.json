@@ -1,0 +1,50 @@
+{
+  "name": "SmartSoma — Personalized STEM Learning",
+  "short_name": "SmartSoma",
+  "description": "AI-powered, offline-first study material recommender for Rwandan secondary students",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#04081a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "categories": ["education"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "label": "Student Dashboard"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My Dashboard",
+      "short_name": "Dashboard",
+      "description": "Go to your personalised learning dashboard",
+      "url": "/student/dashboard",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Browse Materials",
+      "short_name": "Materials",
+      "description": "Browse CBC-aligned study materials",
+      "url": "/student/materials",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -77,6 +77,10 @@ def seed_materials(db, competency_map: dict) -> dict:
             csv_id = int(row["material_id"])
             existing = db.query(Material).filter(Material.material_id == csv_id).first()
             if existing:
+                # Always refresh the URL and content type so CSV changes take effect
+                existing.file_url   = row.get("file_url",   "").strip() or None
+                existing.file_path  = row.get("file_path",  "").strip() or None
+                existing.content_type = row.get("content_type", "").strip() or None
                 material_id_map[csv_id] = existing.material_id
                 continue
 

@@ -266,7 +266,7 @@ export default function LoginPage() {
               </motion.div>
             </form>
 
-            {/* Demo credentials */}
+            {/* Demo credentials
             <motion.div
               {...fadeUpProps(0.38)}
               className="glass mt-6 px-4 py-4 border border-white/[0.07] rounded-xl"
@@ -288,7 +288,7 @@ export default function LoginPage() {
                   </span>
                 </p>
               </div>
-            </motion.div>
+            </motion.div> */}
 
             {/* Register link */}
             <motion.p

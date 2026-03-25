@@ -82,10 +82,12 @@ class MaterialOut(BaseModel):
     subject: str
     competency_id: int
     competency_name: Optional[str] = None   # populated from join
+    grade_level: Optional[str] = None       # populated from competency join
     difficulty_level: str
     content_type: Optional[str]
     duration_minutes: Optional[int]
     file_url: Optional[str] = None
+    file_path: Optional[str] = None         # local static path
     extracted_text: Optional[str] = None
     extraction_status: Optional[str] = None  # "pending" | "done" | "failed"
 
@@ -93,7 +95,7 @@ class MaterialOut(BaseModel):
 
 
 class MaterialDetail(MaterialOut):
-    file_path: Optional[str]
+    pass  # file_path and grade_level are now part of MaterialOut
 
 
 class PagedMaterials(BaseModel):

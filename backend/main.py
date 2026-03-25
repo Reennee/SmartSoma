@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from backend.database import engine, Base
-from backend.routes import auth, students, materials, recommendations, analytics
+from backend.routes import auth, students, materials, recommendations, analytics, quiz
 from backend.services.dkt import DKTService
 from backend.schemas import HealthCheck
 
@@ -32,38 +32,42 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("✅ Database tables ready")
 
-    # Apply any missing column migrations (safe — uses IF NOT EXISTS)
-    try:
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            conn.execute(text(
-                "ALTER TABLE materials ADD COLUMN IF NOT EXISTS description TEXT"
-            ))
-            conn.execute(text(
-                "ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_url VARCHAR(500)"
-            ))
-            conn.execute(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id VARCHAR(50)"
-            ))
-            conn.execute(text(
-                "ALTER TABLE materials ADD COLUMN IF NOT EXISTS extracted_text TEXT"
-            ))
-            conn.execute(text(
-                "ALTER TABLE materials ADD COLUMN IF NOT EXISTS extraction_status VARCHAR(20)"
-            ))
+    # Apply any missing column migrations — each statement is independent so
+    # one failure (e.g. column already exists) does not block the rest.
+    from sqlalchemy import text
+
+    _alter_statements = [
+        "ALTER TABLE materials ADD COLUMN description TEXT",
+        "ALTER TABLE materials ADD COLUMN file_url VARCHAR(500)",
+        "ALTER TABLE users ADD COLUMN school_id VARCHAR(50)",
+        "ALTER TABLE materials ADD COLUMN extracted_text TEXT",
+        "ALTER TABLE materials ADD COLUMN extraction_status VARCHAR(20)",
+    ]
+
+    with engine.connect() as conn:
+        for stmt in _alter_statements:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # column already exists — skip silently
+
+        # CREATE TABLE is idempotent via IF NOT EXISTS — safe in one shot
+        try:
             conn.execute(text(
                 """CREATE TABLE IF NOT EXISTS student_warnings (
-                    warning_id SERIAL PRIMARY KEY,
+                    warning_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL REFERENCES users(user_id),
                     message TEXT NOT NULL,
-                    sent_at TIMESTAMP DEFAULT NOW(),
-                    is_read BOOLEAN DEFAULT FALSE
+                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_read BOOLEAN DEFAULT 0
                 )"""
             ))
             conn.commit()
-        logger.info("✅ DB schema up to date")
-    except Exception as exc:
-        logger.warning(f"⚠️  Schema migration skipped: {exc}")
+        except Exception as exc:
+            logger.warning(f"⚠️  student_warnings table: {exc}")
+
+    logger.info("✅ DB schema up to date")
 
     # Seed the database (idempotent — skips existing records)
     try:
@@ -119,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(materials.router)
     app.include_router(recommendations.router)
     app.include_router(analytics.router)
+    app.include_router(quiz.router)
 
     # ── Static files (downloaded REB PDFs) ────────────────────────────────────
     static_dir = Path(__file__).parent / "static" / "materials"

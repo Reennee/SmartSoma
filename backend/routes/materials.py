@@ -31,26 +31,74 @@ router = APIRouter(prefix="/api/materials", tags=["materials"])
 
 
 def _enrich(material: Material) -> dict:
-    """Add competency_name to a material row for the response."""
+    """Add competency_name and grade_level to a material row for the response."""
     d = {c.name: getattr(material, c.name) for c in material.__table__.columns}
     d["competency_name"] = material.competency.competency_name if material.competency else ""
+    d["grade_level"] = material.competency.grade_level if material.competency else None
     return d
 
 
 def _do_extract(material_id: int) -> None:
-    """Background task: download PDF and extract its text."""
+    """
+    Background task: download a PDF, save it locally under /static/materials/,
+    extract its text, and update file_path + extracted_text on the material row.
+    For YouTube links, text extraction is skipped (no downloadable content).
+    """
+    from pathlib import Path
+    import re as _re
+    import requests as _req
     from backend.database import SessionLocal
     from backend.services.extractor import extract_pdf_text
+
     db = SessionLocal()
+    mat = None
     try:
         mat = db.query(Material).filter(Material.material_id == material_id).first()
         if not mat or not mat.file_url:
             return
-        text = extract_pdf_text(mat.file_url)
-        mat.extracted_text = text
+
+        url = mat.file_url
+
+        # Skip YouTube — nothing to download
+        if "youtube.com" in url or "youtu.be" in url:
+            mat.extraction_status = "failed"
+            db.commit()
+            return
+
+        # ── Download PDF bytes ──────────────────────────────────────────────
+        resp = _req.get(url, timeout=30, stream=True, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; SmartSomaBot/1.0)"
+        })
+        resp.raise_for_status()
+        pdf_bytes = b"".join(resp.iter_content(chunk_size=65536))
+
+        # ── Determine save path: static/materials/{subject}/{grade}/{slug}.pdf
+        subject_slug = (mat.subject or "general").lower().replace(" ", "-")
+        grade = "s1"
+        if mat.competency:
+            grade = (mat.competency.grade_level or "s1").lower()
+        # Build a safe filename from the material title
+        safe_title = _re.sub(r"[^a-z0-9]+", "-", mat.title.lower()).strip("-")[:60]
+        filename = f"{safe_title}-{mat.material_id}.pdf"
+
+        static_dir = Path(__file__).parent.parent / "static" / "materials" / subject_slug / grade
+        static_dir.mkdir(parents=True, exist_ok=True)
+        dest = static_dir / filename
+        dest.write_bytes(pdf_bytes)
+
+        # Store the static path so StudyModal can serve it locally
+        mat.file_path = f"/static/materials/{subject_slug}/{grade}/{filename}"
+
+        # ── Extract text from the downloaded bytes ──────────────────────────
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        parts = [p.extract_text().strip() for p in reader.pages[:50] if p.extract_text()]
+        mat.extracted_text = "\n\n".join(parts)[:100_000]
         mat.extraction_status = "done"
+
     except Exception as exc:
-        logger.warning("Text extraction failed for material %s: %s", material_id, exc)
+        logger.warning("Extraction failed for material %s: %s", material_id, exc)
         if mat:
             mat.extraction_status = "failed"
     finally:

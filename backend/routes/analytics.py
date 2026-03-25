@@ -4,6 +4,8 @@ GET /api/analytics/class   — class-wide overview + competency heatmap
 GET /api/analytics/stats   — system-wide counts (public health check)
 """
 
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session

@@ -15,6 +15,7 @@ import {
 import { materialsApi, type MaterialOut } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 import TestUploadModal from "@/components/TestUploadModal";
+import StudyModal from "@/components/StudyModal";
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
 
@@ -73,12 +74,11 @@ function MaterialsSkeleton() {
 interface MaterialCardProps {
   material: MaterialOut;
   index: number;
-  interacting: boolean;
   done: boolean;
   onStudy: (m: MaterialOut) => void;
 }
 
-function MaterialCard({ material: m, index, interacting, done, onStudy }: MaterialCardProps) {
+function MaterialCard({ material: m, index, done, onStudy }: MaterialCardProps) {
   const subjectCls = subjectColors[m.subject] ?? "bg-white/10 text-white/60 border-white/15";
   const diffCls = difficultyColors[m.difficulty_level] ?? "bg-white/10 text-white/60 border-white/15";
   const typeEmoji = contentTypeIcons[m.content_type ?? ""] ?? "📚";
@@ -91,18 +91,28 @@ function MaterialCard({ material: m, index, interacting, done, onStudy }: Materi
       transition={{ delay: Math.min(index * 0.05, 0.4) }}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
     >
-      {/* Top row: type emoji + difficulty badge */}
+      {/* Top row: type emoji + difficulty badge + studied badge */}
       <div className="flex items-start justify-between gap-2">
         <span className="text-2xl leading-none">{typeEmoji}</span>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${diffCls}`}>
-          {m.difficulty_level}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {done && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
+              <Zap className="w-2.5 h-2.5" />Studied
+            </span>
+          )}
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${diffCls}`}>
+            {m.difficulty_level}
+          </span>
+        </div>
       </div>
 
       {/* Title */}
       <div className="flex-1 space-y-1.5">
         <h3 className="text-sm font-bold text-white leading-snug line-clamp-2">{m.title}</h3>
         <p className="text-xs text-white/40 truncate">{m.competency_name}</p>
+        {m.description && (
+          <p className="text-xs text-white/30 line-clamp-2 leading-relaxed">{m.description}</p>
+        )}
       </div>
 
       {/* Subject + duration row */}
@@ -118,28 +128,14 @@ function MaterialCard({ material: m, index, interacting, done, onStudy }: Materi
         )}
       </div>
 
-      {/* Study button */}
+      {/* Study button — always clickable so users can re-study */}
       <button
         type="button"
         onClick={() => onStudy(m)}
-        disabled={interacting || done}
-        className={`btn-grad w-full py-2 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none ${
-          done ? "bg-linear-to-br from-green-500 to-emerald-600 shadow-green-500/30" : ""
-        }`}
+        className="btn-grad w-full py-2.5 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-all"
       >
-        {interacting ? (
-          <>
-            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            Logging…
-          </>
-        ) : done ? (
-          <><Zap className="w-3.5 h-3.5" />Studied!</>
-        ) : (
-          <><BookOpen className="w-3.5 h-3.5" />Study this</>
-        )}
+        <BookOpen className="w-4 h-4" />
+        {done ? "Study Again" : "Study this"}
       </button>
     </motion.div>
   );
@@ -161,7 +157,6 @@ export default function MaterialsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [interacting, setInteracting] = useState<number | null>(null);
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
   const [flashId, setFlashId] = useState<number | null>(null);
 
@@ -170,6 +165,7 @@ export default function MaterialsPage() {
   const [difficulty, setDifficulty] = useState<Difficulty>("All");
 
   const [showUpload, setShowUpload] = useState(false);
+  const [studyMaterial, setStudyMaterial] = useState<MaterialOut | null>(null);
 
   // Derived unique subjects from loaded materials
   const subjects = Array.from(new Set(materials.map((m) => m.subject))).sort();
@@ -219,15 +215,15 @@ export default function MaterialsPage() {
     finally { setLoadingMore(false); }
   }
 
-  async function handleStudy(m: MaterialOut) {
-    setInteracting(m.material_id);
-    try {
-      await materialsApi.interact(m.material_id, { time_spent_seconds: 300, quiz_score: 70 });
-      setDoneIds((prev) => new Set(prev).add(m.material_id));
-      setFlashId(m.material_id);
-      setTimeout(() => setFlashId(null), 2000);
-    } catch { /* silent */ }
-    finally { setInteracting(null); }
+  function handleStudy(m: MaterialOut) {
+    setStudyMaterial(m);
+  }
+
+  function handleStudyComplete(m: MaterialOut) {
+    setStudyMaterial(null);
+    setDoneIds((prev) => new Set(prev).add(m.material_id));
+    setFlashId(m.material_id);
+    setTimeout(() => setFlashId(null), 2000);
   }
 
   const hasMore = materials.length < total;
@@ -341,7 +337,7 @@ export default function MaterialsPage() {
                 className="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-sm px-5 py-3 rounded-2xl flex items-center gap-2 border border-green-500/30 text-green-300 text-sm font-semibold shadow-2xl"
               >
                 <Zap className="w-4 h-4" />
-                Session logged — mastery updated!
+                Study session saved — mastery updated!
               </motion.div>
             )}
           </AnimatePresence>
@@ -375,7 +371,6 @@ export default function MaterialsPage() {
                     key={m.material_id}
                     material={m}
                     index={i}
-                    interacting={interacting === m.material_id}
                     done={doneIds.has(m.material_id)}
                     onStudy={handleStudy}
                   />
@@ -419,6 +414,16 @@ export default function MaterialsPage() {
 
       {/* ── Test Upload Modal ── */}
       <TestUploadModal open={showUpload} onClose={() => setShowUpload(false)} />
+
+      {/* ── Study Modal ── */}
+      {studyMaterial && (
+        <StudyModal
+          material={studyMaterial}
+          open={true}
+          onClose={() => setStudyMaterial(null)}
+          onCompleted={() => handleStudyComplete(studyMaterial)}
+        />
+      )}
     </div>
   );
 }

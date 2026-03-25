@@ -99,10 +99,12 @@ export interface MaterialOut {
   subject: string;
   competency_id: number;
   competency_name: string;
+  grade_level: string | null;
   difficulty_level: string;
   content_type: string | null;
   duration_minutes: number | null;
   file_url: string | null;
+  file_path: string | null;
   extracted_text: string | null;
   extraction_status: "pending" | "done" | "failed" | null;
 }
@@ -163,6 +165,12 @@ export interface MaterialCreate {
   content_type?: string;
   duration_minutes?: number;
   extract_content?: boolean;
+}
+
+export interface AIQuizQuestion {
+  text: string;
+  options: string[];
+  correct: number;
 }
 
 export interface SubjectGradeEntry {
@@ -301,6 +309,9 @@ export const materialsApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  generateQuiz: (material_id: number) =>
+    request<AIQuizQuestion[]>(`/api/materials/${material_id}/quiz`),
 };
 
 export interface WarningOut {
