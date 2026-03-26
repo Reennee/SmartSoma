@@ -293,14 +293,30 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
               {/* Media tab (YouTube / PDF iframe / web link) */}
               {(isYouTube || activeTab === "media") && (
                 <>
-                  {isYouTube && ytEmbed ? (
-                    <iframe
-                      src={ytEmbed}
-                      title={material.title}
-                      className="w-full h-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
+                  {isYouTube && resolvedUrl ? (
+                    <div className="flex flex-col h-full">
+                      {ytEmbed ? (
+                        <iframe
+                          src={ytEmbed}
+                          title={material.title}
+                          className="flex-1 w-full border-0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : null}
+                      <div className="shrink-0 flex items-center justify-center gap-3 py-3 bg-[#0a0a12] border-t border-white/8">
+                        <p className="text-white/40 text-xs">Video not loading?</p>
+                        <a
+                          href={resolvedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          <PlayCircle className="w-3.5 h-3.5" />
+                          Watch on YouTube
+                        </a>
+                      </div>
+                    </div>
                   ) : isPDF && resolvedUrl ? (
                     <iframe
                       src={resolvedUrl}

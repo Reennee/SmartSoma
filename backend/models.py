@@ -39,6 +39,7 @@ class CBCCompetency(Base):
 
     competency_id = Column(Integer, primary_key=True, index=True)
     competency_name = Column(String(200), nullable=False)
+    subject = Column(String(100), nullable=False)           # Mathematics | Physics
     description = Column(Text, nullable=True)
     grade_level = Column(String(10), nullable=False)
 
