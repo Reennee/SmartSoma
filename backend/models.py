@@ -69,6 +69,7 @@ class Material(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     extracted_text = Column(Text, nullable=True)            # Full text extracted from PDF/webpage
     extraction_status = Column(String(20), nullable=True)   # "pending" | "done" | "failed"
+    extraction_error = Column(Text, nullable=True)           # human-readable failure reason
 
     # Relationships
     competency = relationship("CBCCompetency", back_populates="materials")

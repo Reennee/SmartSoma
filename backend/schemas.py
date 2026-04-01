@@ -90,6 +90,7 @@ class MaterialOut(BaseModel):
     file_path: Optional[str] = None         # local static path
     extracted_text: Optional[str] = None
     extraction_status: Optional[str] = None  # "pending" | "done" | "failed"
+    extraction_error: Optional[str] = None   # human-readable failure reason
 
     model_config = {"from_attributes": True}
 

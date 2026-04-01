@@ -42,7 +42,22 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE users ADD COLUMN school_id VARCHAR(50)",
         "ALTER TABLE materials ADD COLUMN extracted_text TEXT",
         "ALTER TABLE materials ADD COLUMN extraction_status VARCHAR(20)",
+        # cbc_competencies.subject was added to the model but never migrated
+        "ALTER TABLE cbc_competencies ADD COLUMN subject VARCHAR(100)",
+        "ALTER TABLE materials ADD COLUMN extraction_error TEXT",
     ]
+
+    # Backfill subject on existing competency rows that have NULL subject
+    # by joining to the materials table which already stores subject.
+    _backfill_sql = """
+        UPDATE cbc_competencies
+        SET subject = (
+            SELECT m.subject FROM materials m
+            WHERE m.competency_id = cbc_competencies.competency_id
+            LIMIT 1
+        )
+        WHERE subject IS NULL
+    """
 
     with engine.connect() as conn:
         for stmt in _alter_statements:
@@ -51,6 +66,13 @@ async def lifespan(app: FastAPI):
                 conn.commit()
             except Exception:
                 conn.rollback()  # column already exists — skip silently
+
+        # Backfill subject column for competency rows that pre-date the migration
+        try:
+            conn.execute(text(_backfill_sql))
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         # CREATE TABLE is idempotent via IF NOT EXISTS — safe in one shot
         try:

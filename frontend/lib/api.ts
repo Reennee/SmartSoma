@@ -107,6 +107,7 @@ export interface MaterialOut {
   file_path: string | null;
   extracted_text: string | null;
   extraction_status: "pending" | "done" | "failed" | null;
+  extraction_error: string | null;
 }
 
 export interface PagedMaterials {

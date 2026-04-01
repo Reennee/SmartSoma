@@ -59,25 +59,41 @@ def _do_extract(material_id: int) -> None:
 
         url = mat.file_url
 
-        # Skip YouTube — nothing to download
+        # YouTube has no downloadable content — leave status as-is (not a failure)
         if "youtube.com" in url or "youtu.be" in url:
-            mat.extraction_status = "failed"
+            mat.extraction_status = None
             db.commit()
             return
 
-        # ── Download PDF bytes ──────────────────────────────────────────────
+        # ── Download the URL ────────────────────────────────────────────────
         resp = _req.get(url, timeout=30, stream=True, headers={
             "User-Agent": "Mozilla/5.0 (compatible; SmartSomaBot/1.0)"
-        })
+        }, allow_redirects=True)
         resp.raise_for_status()
+
+        # Validate that the response is actually a PDF, not a login-redirect HTML page
+        content_type = resp.headers.get("Content-Type", "")
+        if "pdf" not in content_type.lower() and not url.lower().endswith(".pdf"):
+            raise ValueError(
+                f"URL did not return a PDF file (Content-Type: '{content_type}'). "
+                "The link may require login, or may point to a webpage instead of a direct PDF. "
+                "Use the direct download URL for the PDF file."
+            )
+
         pdf_bytes = b"".join(resp.iter_content(chunk_size=65536))
+
+        # Double-check magic bytes — a real PDF starts with %PDF
+        if not pdf_bytes.startswith(b"%PDF"):
+            raise ValueError(
+                "Downloaded file does not appear to be a valid PDF (missing %PDF header). "
+                "The URL may redirect to a login page or a different file type."
+            )
 
         # ── Determine save path: static/materials/{subject}/{grade}/{slug}.pdf
         subject_slug = (mat.subject or "general").lower().replace(" ", "-")
         grade = "s1"
         if mat.competency:
             grade = (mat.competency.grade_level or "s1").lower()
-        # Build a safe filename from the material title
         safe_title = _re.sub(r"[^a-z0-9]+", "-", mat.title.lower()).strip("-")[:60]
         filename = f"{safe_title}-{mat.material_id}.pdf"
 
@@ -86,21 +102,22 @@ def _do_extract(material_id: int) -> None:
         dest = static_dir / filename
         dest.write_bytes(pdf_bytes)
 
-        # Store the static path so StudyModal can serve it locally
         mat.file_path = f"/static/materials/{subject_slug}/{grade}/{filename}"
 
-        # ── Extract text from the downloaded bytes ──────────────────────────
+        # ── Extract text ────────────────────────────────────────────────────
         import io
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(pdf_bytes))
         parts = [p.extract_text().strip() for p in reader.pages[:50] if p.extract_text()]
         mat.extracted_text = "\n\n".join(parts)[:100_000]
         mat.extraction_status = "done"
+        mat.extraction_error = None
 
     except Exception as exc:
         logger.warning("Extraction failed for material %s: %s", material_id, exc)
         if mat:
             mat.extraction_status = "failed"
+            mat.extraction_error = str(exc)[:500]
     finally:
         db.commit()
         db.close()
@@ -138,7 +155,7 @@ def list_materials(
     difficulty_level: Optional[str] = None,
     competency_id: Optional[int] = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(12, ge=1, le=100),
+    limit: int = Query(12, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):

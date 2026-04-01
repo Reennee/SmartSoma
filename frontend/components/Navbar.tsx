@@ -35,6 +35,7 @@ const studentLinks: NavLink[] = [
 
 const teacherLinks: NavLink[] = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/teacher/materials", label: "Materials", icon: BookOpen },
   { href: "/teacher/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

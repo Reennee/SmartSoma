@@ -42,6 +42,7 @@ def seed_competencies(db) -> dict:
             grade = row["grade_level"].strip()
             key = f"{name}|{grade}"
             if key not in competency_map:
+                subject = row.get("subject", "").strip() or None
                 existing = (
                     db.query(CBCCompetency)
                     .filter(
@@ -53,6 +54,7 @@ def seed_competencies(db) -> dict:
                 if not existing:
                     comp = CBCCompetency(
                         competency_name=name,
+                        subject=subject,
                         grade_level=grade,
                         description=f"CBC {grade} competency: {name}",
                     )
