@@ -229,7 +229,7 @@ export const authApi = {
     password: string;
     role: string;
     grade_level?: string;
-    school_id?: string;
+    school_name?: string;
   }) => request<TokenResponse>("/api/auth/register", { method: "POST", body: JSON.stringify(data) }),
 
   login: (email: string, password: string) =>

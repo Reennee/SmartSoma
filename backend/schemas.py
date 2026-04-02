@@ -16,7 +16,7 @@ class RegisterRequest(BaseModel):
     password: str
     role: str = "student"          # "student" | "teacher"
     grade_level: Optional[str] = None  # S1, S2, S3
-    school_id: Optional[str] = None    # school / organisation ID
+    school_name: Optional[str] = None  # school name — auto-assigned ID in DB
 
     @field_validator("role")
     @classmethod

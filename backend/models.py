@@ -14,6 +14,15 @@ from sqlalchemy.orm import relationship
 from backend.database import Base
 
 
+class School(Base):
+    __tablename__ = "schools"
+
+    school_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, unique=True)
+
+    users = relationship("User", back_populates="school")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -23,10 +32,12 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="student")   # "student" | "teacher"
     grade_level = Column(String(10), nullable=True)                # S1, S2, S3 (students only)
-    school_id = Column(String(50), nullable=True, index=True)      # school / organisation ID
+    school_id = Column(String(200), nullable=True, index=True)     # school name (denormalised for display)
+    school_fk = Column(Integer, ForeignKey("schools.school_id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
+    school = relationship("School", back_populates="users")
     mastery_logs = relationship("StudentMasteryLog", back_populates="user")
     recommendations = relationship("Recommendation", back_populates="user")
     interactions = relationship("InteractionLog", back_populates="user")

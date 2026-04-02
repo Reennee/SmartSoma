@@ -73,7 +73,7 @@ interface FormState {
   password: string;
   role: Role;
   grade_level: Grade;
-  school_id: string;
+  school_name: string;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ export default function RegisterPage() {
     password: "",
     role: "student",
     grade_level: "S1",
-    school_id: "",
+    school_name: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -108,7 +108,7 @@ export default function RegisterPage() {
         password: form.password,
         role: form.role,
         grade_level: form.role === "student" ? form.grade_level : undefined,
-        school_id: form.school_id || undefined,
+        school_name: form.school_name || undefined,
       };
       const data = await authApi.register(payload);
       saveAuth(data.access_token, {
@@ -326,22 +326,22 @@ export default function RegisterPage() {
                 </div>
               </motion.div>
 
-              {/* School / Organisation ID */}
+              {/* School Name */}
               <motion.div
                 {...fadeUpProps(0.40)}
                 className="flex flex-col gap-1.5"
               >
                 <label className="text-white/70 text-sm font-medium">
-                  School / Organisation ID{" "}
+                  School Name{" "}
                   <span className="text-white/30 font-normal">(optional)</span>
                 </label>
                 <div className="relative">
                   <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="e.g. GS-KIGALI-001"
-                    value={form.school_id}
-                    onChange={(e) => update("school_id", e.target.value)}
+                    placeholder="e.g. Green Hills Academy Kigali"
+                    value={form.school_name}
+                    onChange={(e) => update("school_name", e.target.value)}
                     className="input-premium pl-11"
                   />
                 </div>

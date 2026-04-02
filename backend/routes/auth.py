@@ -16,7 +16,7 @@ from backend.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from backend.database import get_db
-from backend.models import User
+from backend.models import User, School
 from backend.schemas import (
     RegisterRequest, LoginRequest, TokenResponse, UserOut
 )
@@ -34,13 +34,25 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
             detail="An account with this email already exists",
         )
 
+    # Find or create the school record
+    school_fk = None
+    school_name = payload.school_name.strip() if payload.school_name else None
+    if school_name:
+        school = db.query(School).filter(School.name == school_name).first()
+        if not school:
+            school = School(name=school_name)
+            db.add(school)
+            db.flush()
+        school_fk = school.school_id
+
     user = User(
         full_name=payload.full_name,
         email=payload.email,
         password_hash=hash_password(payload.password),
         role=payload.role,
         grade_level=payload.grade_level,
-        school_id=payload.school_id,
+        school_id=school_name,   # store name for display in navbar / analytics filter
+        school_fk=school_fk,     # FK to schools table for the auto-assigned integer ID
     )
     db.add(user)
     db.commit()

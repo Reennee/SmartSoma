@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
         # cbc_competencies.subject was added to the model but never migrated
         "ALTER TABLE cbc_competencies ADD COLUMN subject VARCHAR(100)",
         "ALTER TABLE materials ADD COLUMN extraction_error TEXT",
+        "ALTER TABLE users ADD COLUMN school_fk INTEGER REFERENCES schools(school_id)",
     ]
 
     # Backfill subject on existing competency rows that have NULL subject
@@ -75,6 +76,17 @@ async def lifespan(app: FastAPI):
             conn.rollback()
 
         # CREATE TABLE is idempotent via IF NOT EXISTS — safe in one shot
+        try:
+            conn.execute(text(
+                """CREATE TABLE IF NOT EXISTS schools (
+                    school_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(200) NOT NULL UNIQUE
+                )"""
+            ))
+            conn.commit()
+        except Exception as exc:
+            logger.warning(f"⚠️  schools table: {exc}")
+
         try:
             conn.execute(text(
                 """CREATE TABLE IF NOT EXISTS student_warnings (
