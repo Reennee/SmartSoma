@@ -140,7 +140,7 @@ const tooltipStyle = {
   },
 };
 
-function barTooltipFormatter(v: number | undefined): [string, string] {
+function barTooltipFormatter(v: number | string | undefined): [string, string] {
   return [`${v ?? 0}%`, "Mastery"];
 }
 
