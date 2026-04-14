@@ -82,6 +82,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
   const [mounted, setMounted]       = useState(false);   // SSR guard for portal
   const [activeTab, setActiveTab]   = useState<"text" | "media">("media");
   const [showQuiz, setShowQuiz]     = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Portal requires document — wait until client mount
@@ -134,6 +135,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
   async function submitWithScore(quizScore: number) {
     setShowQuiz(false);
     setCompleting(true);
+    setSubmitError(null);
     const total = saved + elapsed;
     try {
       await materialsApi.interact(material.material_id, {
@@ -143,7 +145,9 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
       saveSeconds(material.material_id, total);
       setCompleted(true);
       onCompleted?.();
-    } catch { /* silent */ }
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to save your progress");
+    }
     finally { setCompleting(false); }
   }
 
@@ -161,7 +165,7 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[9999] flex flex-col bg-black/85 backdrop-blur-sm"
+          className="fixed inset-0 z-9999 flex flex-col bg-black/85 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <motion.div
@@ -305,12 +309,12 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
                         />
                       ) : null}
                       <div className="shrink-0 flex items-center justify-center gap-3 py-3 bg-[#0a0a12] border-t border-white/8">
-                        <p className="text-white/40 text-xs">Video not loading?</p>
+                        <p className="text-white/40 text-xs">Video not loading or unavailable?</p>
                         <a
                           href={resolvedUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-400/25 text-xs font-semibold text-red-400 hover:bg-red-500/25 transition-colors"
                         >
                           <PlayCircle className="w-3.5 h-3.5" />
                           Watch on YouTube
@@ -358,6 +362,11 @@ export default function StudyModal({ material, open, onClose, onCompleted }: Pro
                 )}
                 {material.duration_minutes && (
                   <p className="mt-0.5">Estimated: {material.duration_minutes} min</p>
+                )}
+                {submitError && (
+                  <p className="mt-2 text-amber-300/90 text-xs">
+                    {submitError}
+                  </p>
                 )}
               </div>
 

@@ -77,7 +77,7 @@ export default function LoginPage() {
         role: data.role,
         school_id: data.school_id,
       });
-      router.push(
+      router.push( 
         data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard"
       );
     } catch (err: unknown) {
@@ -196,12 +196,13 @@ export default function LoginPage() {
                 {...fadeUpProps(0.18)}
                 className="flex flex-col gap-1.5"
               >
-                <label className="text-white/70 text-sm font-medium">
+                <label htmlFor="login-email" className="text-white/70 text-sm font-medium">
                   Email address
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
                   <input
+                    id="login-email"
                     type="email"
                     placeholder="you@smartsoma.rw"
                     value={email}
@@ -217,12 +218,13 @@ export default function LoginPage() {
                 {...fadeUpProps(0.24)}
                 className="flex flex-col gap-1.5"
               >
-                <label className="text-white/70 text-sm font-medium">
+                <label htmlFor="login-password" className="text-white/70 text-sm font-medium">
                   Password
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
                   <input
+                    id="login-password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={password}
@@ -234,6 +236,7 @@ export default function LoginPage() {
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70 transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -265,32 +268,6 @@ export default function LoginPage() {
                 </button>
               </motion.div>
             </form>
-
-            {/* Demo credentials
-            <motion.div
-              {...fadeUpProps(0.38)}
-              className="glass mt-6 px-4 py-4 border border-white/[0.07] rounded-xl"
-            >
-              <p className="text-white/40 text-[11px] font-semibold uppercase tracking-widest mb-2">
-                Demo credentials
-              </p>
-              <div className="flex flex-col gap-1">
-                <p className="text-white/40 text-xs">
-                  Student:{" "}
-                  <span className="text-white/70 font-mono">
-                    student1@smartsoma.rw&nbsp;/&nbsp;SmartSoma2025!
-                  </span>
-                </p>
-                <p className="text-white/40 text-xs">
-                  Teacher:{" "}
-                  <span className="text-white/70 font-mono">
-                    teacher@smartsoma.rw&nbsp;/&nbsp;TeacherPass2025!
-                  </span>
-                </p>
-              </div>
-            </motion.div> */}
-
-            {/* Register link */}
             <motion.p
               {...fadeUpProps(0.44)}
               className="text-center text-sm text-white/40 mt-6"

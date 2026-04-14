@@ -156,6 +156,7 @@ export default function MaterialsPage() {
   const [skip, setSkip] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
   const [flashId, setFlashId] = useState<number | null>(null);
@@ -166,6 +167,7 @@ export default function MaterialsPage() {
 
   const [showUpload, setShowUpload] = useState(false);
   const [studyMaterial, setStudyMaterial] = useState<MaterialOut | null>(null);
+  const [studyOpen, setStudyOpen] = useState(false);
 
   // Derived unique subjects from loaded materials
   const subjects = Array.from(new Set(materials.map((m) => m.subject))).sort();
@@ -207,23 +209,40 @@ export default function MaterialsPage() {
   async function loadMore() {
     const nextSkip = skip + PAGE_SIZE;
     setLoadingMore(true);
+    setLoadMoreError(null);
     try {
       const data = await materialsApi.list(buildParams(nextSkip));
       setMaterials((prev) => [...prev, ...data.items]);
       setSkip(nextSkip);
-    } catch { /* silent */ }
+    } catch (err: unknown) {
+      setLoadMoreError(err instanceof Error ? err.message : "Failed to load more materials");
+    }
     finally { setLoadingMore(false); }
   }
 
   function handleStudy(m: MaterialOut) {
+    // Set the material first so the modal has a stable prop before it opens.
+    // Opening on the next tick lets StudyModal's portal mount before the
+    // AnimatePresence entry animation runs — same pattern as RecommendationCard.
     setStudyMaterial(m);
+    setTimeout(() => setStudyOpen(true), 0);
   }
 
-  function handleStudyComplete(m: MaterialOut) {
-    setStudyMaterial(null);
-    setDoneIds((prev) => new Set(prev).add(m.material_id));
-    setFlashId(m.material_id);
-    setTimeout(() => setFlashId(null), 2000);
+  function handleStudyClose() {
+    // Lower the open flag so the exit animation plays, then clear the material.
+    setStudyOpen(false);
+    setTimeout(() => setStudyMaterial(null), 350);
+  }
+
+  function handleStudyComplete() {
+    setStudyOpen(false);
+    if (studyMaterial) {
+      const id = studyMaterial.material_id;
+      setDoneIds((prev) => new Set(prev).add(id));
+      setFlashId(id);
+      setTimeout(() => setFlashId(null), 2000);
+    }
+    setTimeout(() => setStudyMaterial(null), 350);
   }
 
   const hasMore = materials.length < total;
@@ -386,6 +405,11 @@ export default function MaterialsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
+              {loadMoreError && (
+                <div className="glass-sm border border-amber-500/25 text-amber-200/90 text-xs px-4 py-2 rounded-xl max-w-md text-center">
+                  {loadMoreError}
+                </div>
+              )}
               <p className="text-xs text-white/30">
                 Loaded {materials.length} of {total} materials
               </p>
@@ -419,9 +443,9 @@ export default function MaterialsPage() {
       {studyMaterial && (
         <StudyModal
           material={studyMaterial}
-          open={true}
-          onClose={() => setStudyMaterial(null)}
-          onCompleted={() => handleStudyComplete(studyMaterial)}
+          open={studyOpen}
+          onClose={handleStudyClose}
+          onCompleted={handleStudyComplete}
         />
       )}
     </div>

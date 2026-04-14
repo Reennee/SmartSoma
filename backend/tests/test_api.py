@@ -128,7 +128,8 @@ def register_and_login(client, email, password, full_name, role,
     if grade_level:
         payload["grade_level"] = grade_level
     if school_id:
-        payload["school_id"] = school_id
+        # API schema uses school_name (a display name / tenant marker)
+        payload["school_name"] = school_id
     r = client.post("/api/auth/register", json=payload)
     assert r.status_code == 201, f"Register failed ({r.status_code}): {r.text}"
     d = r.json()
@@ -306,6 +307,39 @@ class TestMaterials:
         items = r.json().get("items", r.json()) if isinstance(r.json(), dict) else r.json()
         assert len(items) >= 2
 
+    def test_materials_order_newest_published_first(self, client, materials_token):
+        # Create two materials; API should return newest published first.
+        # (Creation sets published_at automatically.)
+        teacher_token, _ = register_and_login(
+            client, "order_teacher@school.rw", "OrderTeacher1!",
+            "Order Teacher", "teacher",
+        )
+        r1 = client.post("/api/materials", json={
+            "title": "Ordering A",
+            "subject": "Mathematics",
+            "competency_id": 1,
+            "difficulty_level": "Beginner",
+            "content_type": "PDF",
+            "duration_minutes": 10,
+        }, headers=auth_headers(teacher_token))
+        assert r1.status_code in (200, 201)
+        r2 = client.post("/api/materials", json={
+            "title": "Ordering B",
+            "subject": "Mathematics",
+            "competency_id": 1,
+            "difficulty_level": "Beginner",
+            "content_type": "PDF",
+            "duration_minutes": 10,
+        }, headers=auth_headers(teacher_token))
+        assert r2.status_code in (200, 201)
+
+        r = client.get("/api/materials", headers=auth_headers(materials_token))
+        assert r.status_code == 200
+        items = r.json().get("items", [])
+        titles = [m["title"] for m in items[:5]]
+        assert "Ordering B" in titles and "Ordering A" in titles
+        assert titles.index("Ordering B") < titles.index("Ordering A")
+
     def test_filter_by_subject_math(self, client, materials_token):
         r = client.get("/api/materials?subject=Mathematics",
                        headers=auth_headers(materials_token))
@@ -446,6 +480,23 @@ class TestAnalytics:
         r = client.get("/api/analytics/stats")
         assert r.status_code == 200
 
+    def test_teacher_can_warn_student_in_other_school(self, client):
+        # Current behavior: warnings are not school-scoped (future enhancement).
+        teacher_token, _ = register_and_login(
+            client, "warn_teacher@a.rw", "WarnTeacher1!",
+            "Warn Teacher", "teacher", school_id="SchoolA"
+        )
+        _, student_id = register_and_login(
+            client, "warn_student@b.rw", "WarnStudent1!",
+            "Warn Student", "student", grade_level="S1", school_id="SchoolB"
+        )
+        r = client.post(
+            f"/api/analytics/warn/{student_id}",
+            json={"message": "Test"},
+            headers=auth_headers(teacher_token),
+        )
+        assert r.status_code in (200, 201)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. STUDENT PROGRESS & GRADES
@@ -488,6 +539,32 @@ class TestStudentProgress:
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
+    def test_upload_topic_grades_by_competency_and_text(self, client, progress_token):
+        # By competency id
+        r1 = client.post(
+            "/api/students/me/topic-grades",
+            json={"grades": [{"subject": "Mathematics", "grade": 35.0, "competency_id": 1}]},
+            headers=auth_headers(progress_token),
+        )
+        assert r1.status_code == 200
+        body1 = r1.json()
+        assert body1["saved"] == 1
+
+        # By free-text topic
+        r2 = client.post(
+            "/api/students/me/topic-grades",
+            json={"grades": [{"subject": "Mathematics", "grade": 40.0, "topic": "Integers"}]},
+            headers=auth_headers(progress_token),
+        )
+        assert r2.status_code == 200
+        body2 = r2.json()
+        assert body2["saved"] == 1
+
+        # Can read back
+        r3 = client.get("/api/students/me/topic-grades", headers=auth_headers(progress_token))
+        assert r3.status_code == 200
+        assert isinstance(r3.json(), list)
+
     def test_upload_test_results(self, client, progress_token):
         r = client.post("/api/students/me/upload-results",
                         json={"results": [
@@ -515,6 +592,24 @@ class TestStudentProgress:
     def test_progress_requires_auth(self, client):
         r = client.get("/api/students/me/progress")
         assert r.status_code in (401, 403)
+
+    def test_teacher_cannot_view_progress_for_student_in_other_school(self, client):
+        # Teacher in SchoolA
+        teacher_token, _ = register_and_login(
+            client, "scope_teacher@a.rw", "ScopeTeacher1!",
+            "Scope Teacher", "teacher", school_id="SchoolA"
+        )
+        # Student in SchoolB
+        _, student_id = register_and_login(
+            client, "scope_student@b.rw", "ScopeStudent1!",
+            "Scope Student", "student", grade_level="S1", school_id="SchoolB"
+        )
+
+        r = client.get(
+            f"/api/students/{student_id}/progress",
+            headers=auth_headers(teacher_token),
+        )
+        assert r.status_code == 403
 
 
 # ─────────────────────────────────────────────────────────────────────────────

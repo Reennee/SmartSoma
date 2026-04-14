@@ -248,6 +248,78 @@ class SubjectGradeUploadResponse(BaseModel):
     subject_grades: List[SubjectGradeOut]
 
 
+# ─── Topic / Competency Grade Upload ──────────────────────────────────────────
+
+class TopicGradeEntry(BaseModel):
+    """
+    A student's grade for a specific topic/competency within a subject (0–100).
+    Either competency_id or topic must be provided.
+    """
+    subject: str
+    grade: float  # 0–100
+    competency_id: Optional[int] = None
+    topic: Optional[str] = None
+
+    @field_validator("grade")
+    @classmethod
+    def topic_grade_must_be_valid(cls, v: float) -> float:
+        if not 0 <= v <= 100:
+            raise ValueError("grade must be between 0 and 100")
+        return v
+
+    @field_validator("topic")
+    @classmethod
+    def topic_trim(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        t = v.strip()
+        return t or None
+
+    @field_validator("competency_id")
+    @classmethod
+    def competency_id_must_be_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("competency_id must be positive")
+        return v
+
+    @field_validator("subject")
+    @classmethod
+    def subject_must_not_be_empty(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("subject is required")
+        return s
+
+    @field_validator("topic")
+    @classmethod
+    def must_have_competency_or_topic(cls, v: Optional[str], info):
+        # Runs after topic_trim; validate with competency_id from data
+        data = info.data
+        if not data.get("competency_id") and not v:
+            raise ValueError("Either competency_id or topic must be provided")
+        return v
+
+
+class TopicGradeUploadRequest(BaseModel):
+    grades: List[TopicGradeEntry]
+
+
+class TopicGradeOut(BaseModel):
+    id: int
+    subject: str
+    grade: float
+    competency_id: Optional[int] = None
+    topic: Optional[str] = None
+    last_updated: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TopicGradeUploadResponse(BaseModel):
+    saved: int
+    topic_grades: List[TopicGradeOut]
+
+
 # ─── Material Create / Preview (Teacher) ─────────────────────────────────────
 
 class MaterialCreate(BaseModel):
@@ -260,6 +332,18 @@ class MaterialCreate(BaseModel):
     content_type: Optional[str] = None
     duration_minutes: Optional[int] = None
     extract_content: bool = False   # if True, extract text from file_url in background
+
+
+class MaterialUpdate(BaseModel):
+    """All fields optional — only supplied fields are updated (PATCH semantics)."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    file_url: Optional[str] = None
+    subject: Optional[str] = None
+    competency_id: Optional[int] = None
+    difficulty_level: Optional[str] = None
+    content_type: Optional[str] = None
+    duration_minutes: Optional[int] = None
 
 
 class MaterialPreviewRequest(BaseModel):

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.models import (
     CBCCompetency, InteractionLog, Material,
-    StudentMasteryLog, StudentSubjectGrade, User,
+    StudentMasteryLog, StudentSubjectGrade, StudentTopicGrade, User,
 )
 from backend.schemas import RecommendedMaterial
 from backend.services.dkt import DKTService
@@ -45,6 +45,23 @@ class HybridRecommender:
             .all()
         )
         subject_grade_map = {r.subject.lower(): r.grade / 100.0 for r in subject_grade_rows}
+
+        # 1c ── Gather topic/competency grades
+        topic_grade_rows = (
+            db.query(StudentTopicGrade)
+            .filter(StudentTopicGrade.user_id == user.user_id)
+            .all()
+        )
+        competency_grade_map = {
+            r.competency_id: r.grade / 100.0
+            for r in topic_grade_rows
+            if r.competency_id is not None
+        }
+        topic_text_grades = [
+            (r.topic.strip().lower(), r.grade / 100.0)
+            for r in topic_grade_rows
+            if r.topic
+        ]
 
         # 2 ── Get student's recent interaction history for DKT
         recent_interactions = (
@@ -96,6 +113,19 @@ class HybridRecommender:
             subject_grade = subject_grade_map.get(mat.subject.lower())
             subject_boost = (1.0 - subject_grade) * 0.20 if subject_grade is not None else 0.0
 
+            # Topic/competency boost (more precise than subject grade):
+            # - If student uploaded a grade for this competency_id, boost up to +0.25
+            # - Else if student provided free-text topic that matches the competency name, boost up to +0.10
+            topic_boost = 0.0
+            comp_grade = competency_grade_map.get(mat.competency_id)
+            if comp_grade is not None:
+                topic_boost = (1.0 - comp_grade) * 0.25
+            else:
+                comp_name_l = (mat.competency.competency_name or "").lower() if mat.competency else ""
+                for topic_text, grade_frac in topic_text_grades:
+                    if topic_text and topic_text in comp_name_l:
+                        topic_boost = max(topic_boost, (1.0 - grade_frac) * 0.10)
+
             # Weighted composite score
             raw_score = (
                 mastery_gap * 0.45
@@ -103,6 +133,7 @@ class HybridRecommender:
                 + novelty * 0.15
                 + dkt_confidence * 0.10
                 + subject_boost * 0.10   # subject grade weighting (up to +0.20 for weak subjects)
+                + topic_boost * 0.10     # topic/competency weighting (up to +0.25 for weak competencies)
             )
             confidence_score = round(min(raw_score, 1.0), 4)
 

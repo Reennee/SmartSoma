@@ -128,7 +128,6 @@ html.dark {
   background: #04081a;
   min-height: 100vh;
   position: relative;
-  overflow-x: hidden;
 }
 
 /* ── Animated gradient blobs ── */
@@ -152,15 +151,15 @@ html.dark {
 /* ── Glass surface ── */
 .glass {
   background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
 }
 .glass-sm {
   background: rgba(255,255,255,0.05);
-  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 14px;
 }
@@ -178,8 +177,8 @@ html.dark {
 .gcard {
   position: relative;
   background: rgba(255,255,255,0.035);
-  backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   border-radius: 20px;
   overflow: hidden;
 }
@@ -315,3 +314,9 @@ html.dark {
 
 /* page wrapper — sits above blobs */
 .page-wrap { position: relative; z-index: 1; }
+
+/* student detail side panel */
+.detail-panel {
+  background: rgba(8, 15, 40, 0.97);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}

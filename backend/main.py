@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE users ADD COLUMN school_id VARCHAR(50)",
         "ALTER TABLE materials ADD COLUMN extracted_text TEXT",
         "ALTER TABLE materials ADD COLUMN extraction_status VARCHAR(20)",
+        "ALTER TABLE materials ADD COLUMN published_at TIMESTAMP",
         # cbc_competencies.subject was added to the model but never migrated
         "ALTER TABLE cbc_competencies ADD COLUMN subject VARCHAR(100)",
         "ALTER TABLE materials ADD COLUMN extraction_error TEXT",
@@ -101,15 +102,36 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning(f"⚠️  student_warnings table: {exc}")
 
+        try:
+            conn.execute(text(
+                """CREATE TABLE IF NOT EXISTS student_topic_grades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(user_id),
+                    subject VARCHAR(100) NOT NULL,
+                    topic VARCHAR(200),
+                    competency_id INTEGER REFERENCES cbc_competencies(competency_id),
+                    grade FLOAT NOT NULL,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )"""
+            ))
+            conn.commit()
+        except Exception as exc:
+            logger.warning(f"⚠️  student_topic_grades table: {exc}")
+
     logger.info("✅ DB schema up to date")
 
-    # Seed the database (idempotent — skips existing records)
-    try:
-        from backend.seed import run as seed_run
-        seed_run()
-        logger.info("✅ Database seeded")
-    except Exception as exc:
-        logger.warning(f"⚠️  Seed skipped or failed: {exc}")
+    # Seed the database (dev-only unless explicitly enabled)
+    env = os.getenv("ENV", "development").lower()
+    seed_on_startup = os.getenv("SEED_ON_STARTUP", "").lower() in ("1", "true", "yes")
+    if env in ("dev", "development") or seed_on_startup:
+        try:
+            from backend.seed import run as seed_run
+            seed_run()
+            logger.info("✅ Database seeded")
+        except Exception as exc:
+            logger.warning(f"⚠️  Seed skipped or failed: {exc}")
+    else:
+        logger.info("ℹ️  Seeding disabled (set SEED_ON_STARTUP=true to enable)")
 
     # Load the BiLSTM DKT model into memory
     DKTService.load()
@@ -168,11 +190,19 @@ def create_app() -> FastAPI:
     @app.get("/", response_model=HealthCheck, tags=["system"])
     async def health_check():
         """Public health-check — confirm API is alive."""
+        from sqlalchemy import text
+        db_ok = False
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            db_ok = True
+        except Exception:
+            db_ok = False
         return HealthCheck(
             message="SmartSoma API is running",
             version="2.0.0",
             status="healthy",
-            db_connected=True,
+            db_connected=db_ok,
             model_loaded=DKTService._model is not None,
         )
 

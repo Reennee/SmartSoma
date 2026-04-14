@@ -1,7 +1,7 @@
 // === FILE: components/Navbar.tsx ===
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,12 +14,11 @@ import {
   LogOut,
   Menu,
   X,
-  Sun,
-  Moon,
   Building2,
+  Bell,
 } from "lucide-react";
 import { clearAuth, getUser } from "@/lib/auth";
-import { useTheme } from "@/components/ThemeProvider";
+import { warningsApi, type WarningOut } from "@/lib/api";
 
 interface NavLink {
   href: string;
@@ -48,23 +47,59 @@ export default function Navbar() {
     () => null,
   );
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { theme, toggleTheme } = useTheme();
+
+  // ── Notifications (students only) ──────────────────────────────────────────
+  const isTeacher = pathname.startsWith("/teacher");
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [warnings, setWarnings] = useState<WarningOut[]>([]);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isTeacher) return;
+    let cancelled = false;
+    function fetchWarnings() {
+      warningsApi.getMyWarnings().then((w) => {
+        if (!cancelled) setWarnings(w);
+      }).catch(() => {});
+    }
+    fetchWarnings();
+    const id = setInterval(fetchWarnings, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [isTeacher]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!notifOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [notifOpen]);
+
+  async function dismissWarning(id: number) {
+    await warningsApi.dismiss(id).catch(() => {});
+    setWarnings((prev) => prev.map((w) => w.warning_id === id ? { ...w, is_read: true } : w));
+  }
+
+  const unreadCount = warnings.filter((w) => !w.is_read).length;
 
   function logout() {
     clearAuth();
     router.push("/login");
   }
 
-  const links = user?.role === "teacher" ? teacherLinks : studentLinks;
-  const homePath =
-    user?.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
+  const links = isTeacher ? teacherLinks : studentLinks;
+  const homePath = isTeacher ? "/teacher/dashboard" : "/student/dashboard";
 
   const isActive = (href: string) => pathname === href;
 
   return (
     <>
       {/* ── Sticky navbar ── */}
-      <header className="sticky top-0 z-50 border-b border-white/6 navbar-blur">
+      <header className="fixed top-0 inset-x-0 z-50 border-b border-white/6 navbar-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
 
           {/* ── Logo ── */}
@@ -137,19 +172,80 @@ export default function Navbar() {
               </div>
             )}
 
-            {/* Theme toggle (desktop) */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-xl border border-white/10 bg-white/5 text-white/70 hover:text-yellow-300 hover:border-yellow-400/40 transition-all duration-200"
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
-            </button>
+            {/* Bell (students only) */}
+            {!isTeacher && (
+              <div ref={notifRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotifOpen((p) => !p)}
+                  className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-white/8 bg-white/4 text-white/50 hover:text-white hover:border-white/15 transition-all duration-200"
+                  aria-label="Notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {notifOpen && (
+                    <motion.div
+                      key="notif-dropdown"
+                      initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-12 w-80 glass rounded-2xl border border-white/10 z-50 overflow-hidden shadow-2xl shadow-black/40"
+                    >
+                      <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white">Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                            {unreadCount} unread
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto">
+                        {warnings.length === 0 ? (
+                          <p className="text-center text-white/30 text-sm py-8">No notifications</p>
+                        ) : (
+                          warnings.map((w) => (
+                            <div
+                              key={w.warning_id}
+                              className={[
+                                "px-4 py-3 border-b border-white/5 flex items-start gap-3",
+                                w.is_read ? "opacity-45" : "",
+                              ].join(" ")}
+                            >
+                              <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${w.is_read ? "bg-white/20" : "bg-amber-400"}`} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white/85 leading-snug">{w.message}</p>
+                                <p className="text-[10px] text-white/35 mt-1">
+                                  {new Date(w.sent_at).toLocaleDateString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                </p>
+                              </div>
+                              {!w.is_read && (
+                                <button
+                                  type="button"
+                                  onClick={() => dismissWarning(w.warning_id)}
+                                  className="shrink-0 text-[10px] text-white/35 hover:text-white/70 transition-colors mt-0.5"
+                                  aria-label="Mark as read"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
 
             {/* Logout button */}
             <button
@@ -196,6 +292,9 @@ export default function Navbar() {
           </div>
         </div>
       </header>
+
+      {/* Spacer so page content isn't hidden under the fixed navbar */}
+      <div className="h-16" />
 
       {/* ── Mobile slide-down panel ── */}
       <AnimatePresence>
@@ -265,20 +364,8 @@ export default function Navbar() {
                 })}
               </nav>
 
-              {/* Mobile theme toggle + logout */}
+              {/* Mobile logout */}
               <div className="px-3 pb-3">
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="mb-2 flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-yellow-300 hover:bg-white/5 transition-all duration-200"
-                >
-                  {theme === "dark" ? (
-                    <Sun className="h-4 w-4" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
-                  )}
-                  {theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-                </button>
                 <button
                   type="button"
                   onClick={logout}

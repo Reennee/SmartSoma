@@ -14,6 +14,25 @@ export interface StoredUser {
   school_id: string | null;
 }
 
+/** Decode the JWT payload and return the `exp` Unix timestamp, or null if unreadable. */
+function getTokenExpiry(token: string): number | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof decoded.exp === "number" ? decoded.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Returns true if the token is missing or its exp claim is in the past. */
+function isTokenExpired(token: string): boolean {
+  const exp = getTokenExpiry(token);
+  if (exp === null) return false; // no exp claim → treat as non-expiring
+  return Date.now() >= exp * 1000;
+}
+
 export function saveAuth(token: string, user: StoredUser): void {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -21,9 +40,23 @@ export function saveAuth(token: string, user: StoredUser): void {
   document.cookie = "smartsoma_auth=1; path=/; max-age=172800; SameSite=Lax";
 }
 
+/**
+ * Returns the stored JWT, or null if:
+ * - there is no token
+ * - the token's `exp` claim has passed (auto-clears storage in that case)
+ */
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    // silently wipe stale session so the next page load lands on /login
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    document.cookie = "smartsoma_auth=; path=/; max-age=0";
+    return null;
+  }
+  return token;
 }
 
 // Module-level cache so getUser() returns a stable reference when localStorage

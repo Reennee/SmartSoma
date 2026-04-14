@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
@@ -22,7 +23,7 @@ from backend.models import (
     StudentMasteryLog, User,
 )
 from backend.schemas import (
-    CompetencyOut, MarkViewedRequest, MaterialCreate,
+    CompetencyOut, MarkViewedRequest, MaterialCreate, MaterialUpdate,
     MaterialDetail, MaterialOut, MaterialPreviewRequest,
     MaterialPreviewResponse, PagedMaterials,
 )
@@ -48,7 +49,7 @@ def _do_extract(material_id: int) -> None:
     import re as _re
     import requests as _req
     from backend.database import SessionLocal
-    from backend.services.extractor import extract_pdf_text
+    from backend.services.extractor import _safe_request, _read_stream_with_cap
 
     db = SessionLocal()
     mat = None
@@ -66,9 +67,7 @@ def _do_extract(material_id: int) -> None:
             return
 
         # ── Download the URL ────────────────────────────────────────────────
-        resp = _req.get(url, timeout=30, stream=True, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; SmartSomaBot/1.0)"
-        }, allow_redirects=True)
+        resp = _safe_request("GET", url, stream=True, timeout=30)
         resp.raise_for_status()
 
         # Validate that the response is actually a PDF, not a login-redirect HTML page
@@ -80,7 +79,7 @@ def _do_extract(material_id: int) -> None:
                 "Use the direct download URL for the PDF file."
             )
 
-        pdf_bytes = b"".join(resp.iter_content(chunk_size=65536))
+        pdf_bytes = _read_stream_with_cap(resp)
 
         # Double-check magic bytes — a real PDF starts with %PDF
         if not pdf_bytes.startswith(b"%PDF"):
@@ -119,6 +118,10 @@ def _do_extract(material_id: int) -> None:
             mat.extraction_status = "failed"
             mat.extraction_error = str(exc)[:500]
     finally:
+        try:
+            resp.close()  # type: ignore[name-defined]
+        except Exception:
+            pass
         db.commit()
         db.close()
 
@@ -171,7 +174,20 @@ def list_materials(
         q = q.join(CBCCompetency).filter(CBCCompetency.grade_level == grade_level)
 
     total = q.count()
-    materials = q.offset(skip).limit(limit).all()
+    # Order newest “published” first (NULLS LAST), then by created_at/material_id.
+    # Portable NULLS LAST: order by (published_at IS NULL) ascending.
+    published_nulls_last = case((Material.published_at.is_(None), 1), else_=0)
+    materials = (
+        q.order_by(
+            published_nulls_last.asc(),
+            Material.published_at.desc(),
+            Material.created_at.desc(),
+            Material.material_id.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return {"items": [_enrich(m) for m in materials], "total": total, "skip": skip, "limit": limit}
 
 
@@ -231,6 +247,7 @@ def create_material(
         difficulty_level=payload.difficulty_level,
         content_type=payload.content_type,
         duration_minutes=payload.duration_minutes,
+        published_at=datetime.utcnow(),
         extraction_status="pending" if will_extract else None,
     )
     db.add(material)
@@ -253,6 +270,57 @@ def get_material(
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
     return _enrich(material)
+
+
+@router.patch("/{material_id}", response_model=MaterialOut)
+def update_material(
+    material_id: int,
+    payload: MaterialUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update editable fields on a material. Teacher-only."""
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can edit materials")
+
+    material = db.query(Material).filter(Material.material_id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    if payload.competency_id is not None:
+        competency = db.query(CBCCompetency).filter(
+            CBCCompetency.competency_id == payload.competency_id
+        ).first()
+        if not competency:
+            raise HTTPException(status_code=400, detail="competency_id not found")
+
+    # Apply only the fields that were explicitly provided
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(material, field, value)
+
+    db.commit()
+    db.refresh(material)
+    return _enrich(material)
+
+
+@router.delete("/{material_id}", status_code=204)
+def delete_material(
+    material_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a material and its interaction logs. Teacher-only."""
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can delete materials")
+
+    material = db.query(Material).filter(Material.material_id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    # Remove dependent rows first to satisfy FK constraints
+    db.query(InteractionLog).filter(InteractionLog.material_id == material_id).delete()
+    db.delete(material)
+    db.commit()
 
 
 @router.post("/{material_id}/interact")

@@ -65,6 +65,7 @@ class Material(Base):
         Index("ix_material_subject", "subject"),
         Index("ix_material_competency_id", "competency_id"),
         Index("ix_material_difficulty", "difficulty_level"),
+        Index("ix_material_published_at", "published_at"),
     )
 
     material_id = Column(Integer, primary_key=True, index=True)
@@ -78,6 +79,8 @@ class Material(Base):
     content_type = Column(String(50), nullable=True)        # PDF | Video | Interactive Exercise
     duration_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Manual ordering signal: set when a material is intentionally “added/published”
+    published_at = Column(DateTime, nullable=True, index=True)
     extracted_text = Column(Text, nullable=True)            # Full text extracted from PDF/webpage
     extraction_status = Column(String(20), nullable=True)   # "pending" | "done" | "failed"
     extraction_error = Column(Text, nullable=True)           # human-readable failure reason
@@ -139,6 +142,32 @@ class StudentSubjectGrade(Base):
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="subject_grades")
+
+
+class StudentTopicGrade(Base):
+    """
+    Stores a student's grade for a specific topic/competency within a subject.
+    Used to boost recommendations more precisely than a subject-wide grade.
+    """
+    __tablename__ = "student_topic_grades"
+    __table_args__ = (
+        Index("ix_topic_grade_user_id", "user_id"),
+        Index("ix_topic_grade_subject", "subject"),
+        Index("ix_topic_grade_competency_id", "competency_id"),
+        UniqueConstraint("user_id", "subject", "competency_id", "topic", name="uq_user_subject_competency_topic"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    subject = Column(String(100), nullable=False)
+    # Free-text topic label (optional). If competency_id is set, topic can still be used as a note.
+    topic = Column(String(200), nullable=True)
+    competency_id = Column(Integer, ForeignKey("cbc_competencies.competency_id"), nullable=True)
+    grade = Column(Float, nullable=False)  # 0–100
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+    competency = relationship("CBCCompetency")
 
 
 class StudentWarning(Base):

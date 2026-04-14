@@ -4,6 +4,8 @@
  * All methods that require auth read the JWT from localStorage automatically.
  */
 
+import { getToken } from "@/lib/auth";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,6 +170,17 @@ export interface MaterialCreate {
   extract_content?: boolean;
 }
 
+export interface MaterialUpdate {
+  title?: string;
+  description?: string;
+  file_url?: string;
+  subject?: string;
+  competency_id?: number;
+  difficulty_level?: string;
+  content_type?: string;
+  duration_minutes?: number;
+}
+
 export interface AIQuizQuestion {
   text: string;
   options: string[];
@@ -190,11 +203,39 @@ export interface SubjectGradeUploadResponse {
   subject_grades: SubjectGradeOut[];
 }
 
+export interface TopicGradeEntry {
+  subject: string;
+  grade: number; // 0–100
+  competency_id?: number | null;
+  topic?: string | null;
+}
+
+export interface TopicGradeOut {
+  id: number;
+  subject: string;
+  grade: number;
+  competency_id: number | null;
+  topic: string | null;
+  last_updated: string;
+}
+
+export interface TopicGradeUploadResponse {
+  saved: number;
+  topic_grades: TopicGradeOut[];
+}
+
 // ─── Client ───────────────────────────────────────────────────────────────────
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("smartsoma_token");
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+/** Clear localStorage auth state and hard-navigate to login. */
+function handleSessionExpired(): never {
+  localStorage.removeItem("smartsoma_token");
+  localStorage.removeItem("smartsoma_user");
+  document.cookie = "smartsoma_auth=; path=/; max-age=0";
+  window.location.href = "/login";
+  // throw so TypeScript knows this path never returns a value
+  throw new Error("Session expired");
 }
 
 async function request<T>(
@@ -202,22 +243,60 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
+  const controller = new AbortController();
+  const timeoutMs =
+    typeof (options as { timeoutMs?: number }).timeoutMs === "number"
+      ? (options as { timeoutMs?: number }).timeoutMs!
+      : DEFAULT_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  // Token was in localStorage but has expired — redirect before the request
+  if (!token && typeof window !== "undefined" && localStorage.getItem("smartsoma_token")) {
+    handleSessionExpired();
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: options.signal ?? controller.signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Request timed out. Please try again.");
+    }
+    throw err instanceof Error ? err : new Error("Network error");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  // 401 from the backend means the token is invalid or expired on the server side
+  if (res.status === 401) {
+    handleSessionExpired();
+  }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail ?? `HTTP ${res.status}`);
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("application/json")) {
+      const body = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(body.detail ?? `HTTP ${res.status}`);
+    }
+    const text = await res.text().catch(() => "");
+    throw new Error(text || res.statusText || `HTTP ${res.status}`);
   }
 
   // 204 No Content
   if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  const ct = res.headers.get("content-type") ?? "";
+  if (ct.includes("application/json")) return res.json() as Promise<T>;
+  return (res.text() as unknown) as T;
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -271,6 +350,15 @@ export const studentApi = {
 
   getSubjectGrades: () =>
     request<SubjectGradeOut[]>("/api/students/me/subject-grades"),
+
+  uploadTopicGrades: (grades: TopicGradeEntry[]) =>
+    request<TopicGradeUploadResponse>("/api/students/me/topic-grades", {
+      method: "POST",
+      body: JSON.stringify({ grades }),
+    }),
+
+  getTopicGrades: () =>
+    request<TopicGradeOut[]>("/api/students/me/topic-grades"),
 };
 
 // ─── Materials ───────────────────────────────────────────────────────────────
@@ -313,6 +401,15 @@ export const materialsApi = {
 
   generateQuiz: (material_id: number) =>
     request<AIQuizQuestion[]>(`/api/materials/${material_id}/quiz`),
+
+  update: (material_id: number, data: MaterialUpdate) =>
+    request<MaterialOut>(`/api/materials/${material_id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (material_id: number) =>
+    request<void>(`/api/materials/${material_id}`, { method: "DELETE" }),
 };
 
 export interface WarningOut {

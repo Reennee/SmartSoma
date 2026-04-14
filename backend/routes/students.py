@@ -20,10 +20,19 @@ from backend.schemas import (
     MasteryEntry, RecentInteraction, StudentProgressOut,
     TestUploadRequest, TestUploadResponse,
     SubjectGradeUploadRequest, SubjectGradeUploadResponse, SubjectGradeOut,
+    TopicGradeUploadRequest, TopicGradeUploadResponse, TopicGradeOut,
     WarningOut,
 )
 
 router = APIRouter(prefix="/api/students", tags=["students"])
+
+def _enforce_teacher_school_scope(*, teacher: User, student: User) -> None:
+    """
+    If the teacher has a school_id set, they may only access students in that school.
+    If teacher.school_id is unset, access is not scoped (legacy/demo behavior).
+    """
+    if teacher.school_id and student.school_id != teacher.school_id:
+        raise HTTPException(status_code=403, detail="Student not in your school")
 
 
 def _build_progress(user: User, db: Session) -> StudentProgressOut:
@@ -263,6 +272,107 @@ def get_subject_grades(
     return [SubjectGradeOut(subject=g.subject, grade=g.grade, last_updated=g.last_updated) for g in grades]
 
 
+@router.post("/me/topic-grades", response_model=TopicGradeUploadResponse)
+def upload_topic_grades(
+    payload: TopicGradeUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Student uploads topic/competency grades (0–100) for better recommendations.
+    Each entry is upserted by (subject, competency_id, topic).
+    """
+    from sqlalchemy import and_
+    from backend.models import StudentTopicGrade
+
+    saved = 0
+    for entry in payload.grades:
+        subject_norm = entry.subject.strip()
+        topic_norm = (entry.topic or "").strip() or None
+        comp_id = entry.competency_id
+
+        # If a competency_id is provided, ensure it exists
+        if comp_id is not None:
+            exists = db.query(CBCCompetency).filter(CBCCompetency.competency_id == comp_id).first()
+            if not exists:
+                raise HTTPException(status_code=400, detail=f"competency_id {comp_id} not found")
+
+        q = db.query(StudentTopicGrade).filter(
+            StudentTopicGrade.user_id == current_user.user_id,
+            and_(
+                StudentTopicGrade.subject == subject_norm,
+                (StudentTopicGrade.competency_id == comp_id)
+                if comp_id is not None
+                else StudentTopicGrade.competency_id.is_(None),
+                (func.lower(StudentTopicGrade.topic) == topic_norm.lower())
+                if topic_norm is not None
+                else StudentTopicGrade.topic.is_(None),
+            )
+        )
+        existing = q.first()
+        if existing:
+            existing.grade = entry.grade
+        else:
+            db.add(StudentTopicGrade(
+                user_id=current_user.user_id,
+                subject=subject_norm,
+                competency_id=comp_id,
+                topic=topic_norm,
+                grade=entry.grade,
+            ))
+        saved += 1
+
+    db.commit()
+
+    rows = (
+        db.query(StudentTopicGrade)
+        .filter(StudentTopicGrade.user_id == current_user.user_id)
+        .order_by(StudentTopicGrade.subject, StudentTopicGrade.last_updated.desc())
+        .all()
+    )
+    return TopicGradeUploadResponse(
+        saved=saved,
+        topic_grades=[
+            TopicGradeOut(
+                id=r.id,
+                subject=r.subject,
+                grade=r.grade,
+                competency_id=r.competency_id,
+                topic=r.topic,
+                last_updated=r.last_updated,
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.get("/me/topic-grades", response_model=list[TopicGradeOut])
+def get_topic_grades(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all stored topic/competency grades for the authenticated student."""
+    from backend.models import StudentTopicGrade
+
+    rows = (
+        db.query(StudentTopicGrade)
+        .filter(StudentTopicGrade.user_id == current_user.user_id)
+        .order_by(StudentTopicGrade.subject, StudentTopicGrade.last_updated.desc())
+        .all()
+    )
+    return [
+        TopicGradeOut(
+            id=r.id,
+            subject=r.subject,
+            grade=r.grade,
+            competency_id=r.competency_id,
+            topic=r.topic,
+            last_updated=r.last_updated,
+        )
+        for r in rows
+    ]
+
+
 @router.get("/me/warnings", response_model=list[WarningOut])
 def get_my_warnings(
     db: Session = Depends(get_db),
@@ -303,10 +413,11 @@ def dismiss_warning(
 def student_progress(
     student_id: int,
     db: Session = Depends(get_db),
-    _teacher: User = Depends(require_teacher),
+    teacher: User = Depends(require_teacher),
 ):
     """Teacher-only: view any student's progress."""
     user = db.query(User).filter(User.user_id == student_id, User.role == "student").first()
     if not user:
         raise HTTPException(status_code=404, detail="Student not found")
+    _enforce_teacher_school_scope(teacher=teacher, student=user)
     return _build_progress(user, db)

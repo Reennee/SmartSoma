@@ -232,10 +232,11 @@ export default function RegisterPage() {
                 {...fadeUpProps(0.16)}
                 className="flex flex-col gap-1.5"
               >
-                <label className="text-white/70 text-sm font-medium">
+                <label htmlFor="register-full-name" className="text-white/70 text-sm font-medium">
                   Full name
                 </label>
                 <input
+                  id="register-full-name"
                   type="text"
                   placeholder="Uwamahoro Marie"
                   value={form.full_name}
@@ -250,12 +251,13 @@ export default function RegisterPage() {
                 {...fadeUpProps(0.22)}
                 className="flex flex-col gap-1.5"
               >
-                <label className="text-white/70 text-sm font-medium">
+                <label htmlFor="register-email" className="text-white/70 text-sm font-medium">
                   Email address
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
                   <input
+                    id="register-email"
                     type="email"
                     placeholder="you@smartsoma.rw"
                     value={form.email}
@@ -271,12 +273,13 @@ export default function RegisterPage() {
                 {...fadeUpProps(0.28)}
                 className="flex flex-col gap-1.5"
               >
-                <label className="text-white/70 text-sm font-medium">
+                <label htmlFor="register-password" className="text-white/70 text-sm font-medium">
                   Password
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
                   <input
+                    id="register-password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Min. 8 characters"
                     value={form.password}
@@ -289,6 +292,7 @@ export default function RegisterPage() {
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70 transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -331,13 +335,14 @@ export default function RegisterPage() {
                 {...fadeUpProps(0.40)}
                 className="flex flex-col gap-1.5"
               >
-                <label className="text-white/70 text-sm font-medium">
+                <label htmlFor="register-school-name" className="text-white/70 text-sm font-medium">
                   School Name{" "}
                   <span className="text-white/30 font-normal">(optional)</span>
                 </label>
                 <div className="relative">
                   <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
                   <input
+                    id="register-school-name"
                     type="text"
                     placeholder="e.g. Green Hills Academy Kigali"
                     value={form.school_name}

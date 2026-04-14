@@ -24,6 +24,14 @@ from backend.schemas import (
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
+def _enforce_teacher_school_scope(*, teacher: User, student: User) -> None:
+    """
+    If the teacher has a school_id set, they may only access students in that school.
+    If teacher.school_id is unset, access is not scoped (legacy/demo behavior).
+    """
+    if teacher.school_id and student.school_id != teacher.school_id:
+        raise HTTPException(status_code=403, detail="Student not in your school")
+
 
 @router.get("/class", response_model=ClassAnalyticsOut)
 def class_analytics(
@@ -175,7 +183,7 @@ def warn_student(
     student_id: int,
     body: WarnStudentRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_teacher),
+    _teacher: User = Depends(require_teacher),
 ):
     """Send a warning nudge to an at-risk student."""
     student = db.query(User).filter(

@@ -8,14 +8,105 @@ import json
 import logging
 import os
 import re
+import socket
+import ipaddress
 from html.parser import HTMLParser
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import requests
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
+
+# ── SSRF / URL safety helpers ─────────────────────────────────────────────────
+
+_MAX_REDIRECTS = 3
+_DEFAULT_TIMEOUT = 8
+_MAX_FETCH_BYTES = 25 * 1024 * 1024  # 25MB hard cap for downloads
+
+
+def _is_private_host(hostname: str) -> bool:
+    """
+    Resolve hostname and reject localhost/private/link-local/reserved IPs.
+    Best-effort: if DNS fails, treat as unsafe for preview/extraction.
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except Exception:
+        return True
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return True
+    return False
+
+
+def _validate_external_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Only http/https URLs are allowed")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="URLs with embedded credentials are not allowed")
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise HTTPException(status_code=400, detail="Invalid URL hostname")
+    host_l = hostname.lower()
+    if host_l in ("localhost",) or host_l.endswith(".local"):
+        raise HTTPException(status_code=400, detail="Localhost URLs are not allowed")
+    if _is_private_host(hostname):
+        raise HTTPException(status_code=400, detail="Private-network URLs are not allowed")
+
+
+def _safe_request(method: str, url: str, *, stream: bool = False, timeout: int = _DEFAULT_TIMEOUT):
+    """
+    Perform an outbound request with redirect handling that validates each hop
+    before following (prevents redirect-to-private SSRF).
+    """
+    _validate_external_url(url)
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        r = requests.request(
+            method,
+            current,
+            timeout=timeout,
+            headers=_HEADERS,
+            stream=stream,
+            allow_redirects=False,
+        )
+        if 300 <= r.status_code < 400 and r.headers.get("Location"):
+            nxt = urljoin(current, r.headers["Location"])
+            r.close()
+            _validate_external_url(nxt)
+            current = nxt
+            continue
+        return r
+    raise HTTPException(status_code=400, detail="Too many redirects")
+
+
+def _read_stream_with_cap(resp: requests.Response, *, max_bytes: int = _MAX_FETCH_BYTES) -> bytes:
+    total = 0
+    chunks: list[bytes] = []
+    for chunk in resp.iter_content(chunk_size=65536):
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=400, detail="Remote file is too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 # ── Simple HTML text extractor ─────────────────────────────────────────────────
 
@@ -88,7 +179,7 @@ def fetch_url_content(url: str) -> dict:
         # ── YouTube ────────────────────────────────────────────────────────────
         if _YOUTUBE_RE.search(url) or "youtube.com" in hostname or "youtu.be" in hostname:
             oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
-            r = requests.get(oembed_url, timeout=8, headers=_HEADERS)
+            r = _safe_request("GET", oembed_url, timeout=_DEFAULT_TIMEOUT)
             r.raise_for_status()
             data = r.json()
             return {
@@ -100,7 +191,7 @@ def fetch_url_content(url: str) -> dict:
             }
 
         # ── HEAD request to detect PDF ─────────────────────────────────────────
-        head = requests.head(url, timeout=8, headers=_HEADERS, allow_redirects=True)
+        head = _safe_request("HEAD", url, timeout=_DEFAULT_TIMEOUT)
         ct = head.headers.get("content-type", "").lower()
         if "application/pdf" in ct or url.lower().endswith(".pdf"):
             # Extract filename from URL path as title hint
@@ -115,7 +206,7 @@ def fetch_url_content(url: str) -> dict:
             }
 
         # ── General web page ───────────────────────────────────────────────────
-        r = requests.get(url, timeout=8, headers=_HEADERS)
+        r = _safe_request("GET", url, timeout=_DEFAULT_TIMEOUT)
         r.raise_for_status()
         parser = _TextExtractor()
         parser.feed(r.text[:80_000])   # cap at 80 KB to stay fast
@@ -241,11 +332,16 @@ def extract_pdf_text(url: str, max_pages: int = 50) -> str:
         raise ValueError("pypdf is not installed — run: pip install pypdf")
 
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=30, stream=True)
+        resp = _safe_request("GET", url, stream=True, timeout=30)
         resp.raise_for_status()
-        content = b"".join(resp.iter_content(chunk_size=65536))
+        content = _read_stream_with_cap(resp)
     except Exception as exc:
         raise ValueError(f"Could not download PDF: {exc}")
+    finally:
+        try:
+            resp.close()  # type: ignore[name-defined]
+        except Exception:
+            pass
 
     try:
         reader = PdfReader(io.BytesIO(content))

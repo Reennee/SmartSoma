@@ -49,6 +49,12 @@ self.addEventListener("fetch", (event) => {
 
   // API calls → Network-first, fall back to cached response
   if (url.pathname.startsWith("/api/")) {
+    // Never cache authenticated API responses (prevents cross-user leakage on shared devices)
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader) {
+      event.respondWith(fetch(request));
+      return;
+    }
     event.respondWith(networkFirst(request, API_CACHE));
     return;
   }

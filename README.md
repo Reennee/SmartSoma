@@ -429,65 +429,7 @@ python -m backend.scripts.benchmark --offline --runs 100
 
 The project proposed five core objectives. Here is an honest assessment of what was achieved and where gaps remain:
 
----
-
-**Objective 1 — Offline-first edge deployment**
-> *"Run on a local school server with zero internet dependency after setup."*
-
-**Status: ✅ Achieved.**
-The system runs fully on SQLite with FastAPI and serves the React frontend via a local network. Docker and `railway.toml` configurations are both tested. Inference latency stays below 2 ms on consumer hardware, confirming suitability for Raspberry Pi or equivalent school-server hardware.
-
----
-
-**Objective 2 — BiLSTM Deep Knowledge Tracing for mastery prediction**
-> *"Achieve RMSE < 0.25 and AUC-ROC > 0.75 on held-out student data."*
-
-**Status: ✅ Achieved (with caveats).**
-
-| Metric | Target | Achieved | Notes |
-|--------|--------|----------|-------|
-| RMSE | < 0.25 | **0.0611** | Well below threshold |
-| MAE | < 0.20 | **0.0462** | Well below threshold |
-| AUC-ROC | > 0.75 | **0.7238** | Slightly below target |
-| Accuracy (Binary) | > 80% | **99.57%** | High due to class imbalance |
-| R² Score | > 0.70 | **0.3602** | Significant gap — see below |
-
-The low R² (0.36 vs 0.70 target) reflects the small training set (150 students, 5,000 interactions). The model learns to distinguish mastered vs. unmastered competencies accurately (AUC 0.72, binary accuracy 99.57%) but its continuous mastery score predictions show high variance on sparse interaction histories. This is a known limitation of DKT models trained on synthetic data, documented in Airlangga (2024).
-
----
-
-**Objective 3 — CBC-aligned recommendation engine**
-> *"Return top-K recommendations ranked by mastery gap and curriculum alignment."*
-
-**Status: ✅ Achieved.**
-The hybrid recommender weights mastery gap (0.45), difficulty fit (0.20), novelty (0.15), DKT confidence (0.10), and subject-grade boost (0.10). NDCG@10 of **0.6561** indicates that relevant materials are concentrated at the top of the ranked list. Precision@K metrics (0.003 at K=10) appear low because the evaluation is strict: it counts only materials a student has explicitly interacted with as "relevant", penalising newly seeded materials that no student has studied yet.
-
----
-
-**Objective 4 — Teacher analytics dashboard**
-> *"Provide teachers with real-time class mastery heatmaps and at-risk student flags."*
-
-**Status: ✅ Achieved.**
-The teacher dashboard renders a per-student mastery summary, CBC competency heatmap, and an at-risk list (students below 0.4 mastery with < 3 recent interactions). School-scoping was implemented so teachers only see students from their own school. Role-based access control (RBAC) is enforced on all analytics endpoints — confirmed by automated tests.
-
----
-
-**Objective 5 — Scalable content management for teachers**
-> *"Allow teachers to upload PDF and video materials linked to CBC competencies."*
-
-**Status: ✅ Achieved.**
-Teachers can add materials via the `POST /api/materials` endpoint and the UI modal, providing a URL (PDF or YouTube). The backend automatically extracts text from PDFs in a background task and stores it for in-app reading. YouTube links open directly on YouTube with a fallback thumbnail. Student role is blocked from creating materials (HTTP 403), confirmed by tests.
-
----
-
-### Key Lessons Learned
-
-1. **Synthetic data limits DKT performance.** R² and Precision@K would improve substantially with real student interaction logs. The current metrics are valid for a proof-of-concept but should be re-evaluated after a pilot deployment.
-2. **SQLite is sufficient for school-scale.** A single school with 500 students generates < 50 MB of interaction data per year, well within SQLite's practical limits without the operational overhead of PostgreSQL.
-3. **Offline-first architecture works, but sync remains unsolved.** The current system has no mechanism for aggregating anonymised data from multiple schools. A future version should implement a diff-based sync protocol for the optional cloud PostgreSQL node.
-4. **BiLSTM early stopping (patience=8) prevented overfitting** on the small dataset — training stopped at epoch 44 of 60. Without it, validation loss diverged significantly after epoch 50.
-
----
+--
 
 ## 🚢 Deployment Plan
 

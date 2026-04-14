@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart,
   Bar,
@@ -15,8 +15,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { X, Loader2, AlertTriangle, Send } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { analyticsApi, type ClassAnalyticsOut } from "@/lib/api";
+import { analyticsApi, studentApi, type ClassAnalyticsOut, type StudentProgressOut } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -110,6 +111,44 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<ClassAnalyticsOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [gradeFilter, setGradeFilter] = useState<string>("all");
+
+  // Student detail panel
+  const [detailStudent, setDetailStudent] = useState<{ id: number; name: string } | null>(null);
+  const [detailData, setDetailData] = useState<StudentProgressOut | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [warnMsg, setWarnMsg] = useState("");
+  const [warning, setWarning] = useState<"idle" | "sending" | "sent">("idle");
+
+  function openDetail(userId: number, name: string) {
+    setDetailStudent({ id: userId, name });
+    setDetailData(null);
+    setDetailError(null);
+    setWarnMsg("");
+    setWarning("idle");
+    setDetailLoading(true);
+    studentApi
+      .studentProgress(userId)
+      .then((p) => setDetailData(p))
+      .catch((e: unknown) => setDetailError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setDetailLoading(false));
+  }
+
+  function closeDetail() {
+    setDetailStudent(null);
+    setDetailData(null);
+  }
+
+  async function sendWarning() {
+    if (!detailStudent) return;
+    setWarning("sending");
+    try {
+      await analyticsApi.warnStudent(detailStudent.id, warnMsg || undefined);
+      setWarning("sent");
+    } catch {
+      setWarning("idle");
+    }
+  }
 
   useEffect(() => {
     if (!getToken()) {
@@ -485,12 +524,14 @@ export default function AnalyticsPage() {
                 ) : (
                   <div className="space-y-1.5">
                     {filteredStudents.map((s, i) => (
-                      <motion.div
+                      <motion.button
                         key={s.user_id}
+                        type="button"
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: i * 0.04 }}
-                        className="grid grid-cols-[1fr_76px_80px_1fr] gap-3 items-center px-3 py-3 rounded-xl hover:bg-white/5 transition-colors border border-transparent"
+                        onClick={() => openDetail(s.user_id, s.full_name)}
+                        className="w-full grid grid-cols-[1fr_76px_80px_1fr] gap-3 items-center px-3 py-3 rounded-xl hover:bg-white/7 hover:border-white/10 active:bg-white/10 transition-colors border border-transparent text-left cursor-pointer"
                       >
                         <span className="text-sm font-semibold text-white truncate">
                           {s.full_name}
@@ -502,7 +543,7 @@ export default function AnalyticsPage() {
                           {s.total_interactions}
                         </span>
                         <MasteryBar value={s.overall_mastery} />
-                      </motion.div>
+                      </motion.button>
                     ))}
                   </div>
                 )}
@@ -511,6 +552,172 @@ export default function AnalyticsPage() {
           ) : null}
         </main>
       </div>
+
+      {/* ── Student Detail Panel ── */}
+      <AnimatePresence>
+        {detailStudent && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="detail-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              onClick={closeDetail}
+            />
+
+            {/* Side panel */}
+            <motion.div
+              key="detail-panel"
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 28, stiffness: 260 }}
+              className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md flex flex-col detail-panel"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-white/8 shrink-0">
+                <div>
+                  <h3 className="text-lg font-bold text-white">{detailStudent.name}</h3>
+                  <p className="text-xs text-white/40 mt-0.5">Student progress overview</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDetail}
+                  className="w-8 h-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {detailLoading && (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                  </div>
+                )}
+
+                {detailError && (
+                  <div className="flex items-center gap-2 text-red-400 text-sm py-6">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    {detailError}
+                  </div>
+                )}
+
+                {detailData && (
+                  <>
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: "Overall Mastery", value: `${Math.round(detailData.overall_mastery * 100)}%` },
+                        { label: "Sessions", value: detailData.total_interactions },
+                        { label: "Grade", value: detailData.grade_level ?? "—" },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="glass-sm p-3 text-center">
+                          <p className="text-lg font-bold text-white">{value}</p>
+                          <p className="text-[10px] text-white/40 mt-0.5">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Competency mastery */}
+                    {detailData.competency_mastery.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">
+                          Competency Mastery
+                        </h4>
+                        <div className="space-y-2">
+                          {[...detailData.competency_mastery]
+                            .sort((a, b) => a.mastery_score - b.mastery_score)
+                            .map((c) => (
+                              <div key={c.competency_name} className="glass-sm p-3">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-xs font-medium text-white/80 truncate max-w-[75%]">
+                                    {c.competency_name}
+                                  </span>
+                                  <span className="text-xs font-bold text-white/60 tabular-nums">
+                                    {Math.round(c.mastery_score * 100)}%
+                                  </span>
+                                </div>
+                                <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-linear-to-r from-blue-500 to-purple-500"
+                                    style={{ width: `${Math.round(c.mastery_score * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recent interactions */}
+                    {detailData.recent_interactions.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">
+                          Recent Activity
+                        </h4>
+                        <div className="space-y-2">
+                          {detailData.recent_interactions.slice(0, 5).map((r, i) => (
+                            <div key={i} className="glass-sm p-3 flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-white/80 truncate">{r.material_title}</p>
+                                <p className="text-[10px] text-white/35 mt-0.5">{r.subject}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                {r.quiz_score != null && (
+                                  <p className="text-xs font-bold text-blue-400">{r.quiz_score}%</p>
+                                )}
+                                <p className="text-[10px] text-white/30 mt-0.5">
+                                  {new Date(r.timestamp).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Footer — send warning */}
+              <div className="px-6 py-4 border-t border-white/8 shrink-0 space-y-3">
+                <p className="text-xs text-white/40 font-medium">Send a warning to this student</p>
+                <textarea
+                  value={warnMsg}
+                  onChange={(e) => setWarnMsg(e.target.value)}
+                  placeholder="Optional custom message…"
+                  rows={2}
+                  className="input-premium resize-none text-sm"
+                  disabled={warning === "sent"}
+                />
+                <button
+                  type="button"
+                  onClick={sendWarning}
+                  disabled={warning !== "idle"}
+                  className="btn-grad w-full flex items-center justify-center gap-2 py-2.5 text-sm disabled:opacity-60"
+                >
+                  {warning === "sending" ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : warning === "sent" ? (
+                    "Warning sent ✓"
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Send Warning
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
